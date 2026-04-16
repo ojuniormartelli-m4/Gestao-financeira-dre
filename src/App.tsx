@@ -21,6 +21,7 @@ import { RefreshCw } from 'lucide-react';
 
 export default function App() {
   const [isSupabaseSetup, setIsSupabaseSetup] = React.useState<boolean>(isConfigured());
+  const [isTableMissing, setIsTableMissing] = React.useState<boolean>(false);
   const [isSystemEmpty, setIsSystemEmpty] = React.useState<boolean | null>(null);
 
   const checkSystemStatus = React.useCallback(async () => {
@@ -31,9 +32,9 @@ export default function App() {
       const { data: usersData, error: usersError } = await supabase.from('profiles').select('id').limit(1);
       const { data: rolesData, error: rolesError } = await supabase.from('roles').select('id').limit(1);
 
-      // Se a tabela não existe (42P01), consideramos o sistema "não configurado" ou vazio para disparar o onboarding
+      // Se a tabela não existe (42P01), redirecionamos para a tela de inicialização SQL
       if ((usersError && usersError.code === '42P01') || (rolesError && rolesError.code === '42P01')) {
-        setIsSystemEmpty(true);
+        setIsTableMissing(true);
         return;
       }
 
@@ -48,10 +49,12 @@ export default function App() {
     checkSystemStatus();
   }, [checkSystemStatus]);
 
-  if (!isSupabaseSetup) {
+  // Se as variáveis de ambiente não estiverem configuradas OU as tabelas estiverem faltando
+  if (!isSupabaseSetup || isTableMissing) {
     return <InfrastructureSetupPage onComplete={() => {
       setIsSupabaseSetup(true);
-      window.location.reload(); // Recarregar para garantir que o cliente Supabase use as novas configs
+      setIsTableMissing(false);
+      checkSystemStatus();
     }} />;
   }
 
