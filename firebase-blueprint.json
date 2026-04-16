@@ -1,0 +1,125 @@
+{
+  "entities": {
+    "usuarios": {
+      "title": "User",
+      "description": "System user for authentication and authorization",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "login": { "type": "string" },
+        "password": { "type": "string" },
+        "roleId": { "type": "string" },
+        "photoUrl": { "type": "string" }
+      },
+      "required": ["name", "login", "password", "roleId"]
+    },
+    "roles": {
+      "title": "Role",
+      "description": "User roles for access control",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "companies": {
+      "title": "Company",
+      "description": "Empresa usuária do sistema",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "taxId": { "type": "string" },
+        "currency": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "taxId", "currency"]
+    },
+    "chartOfAccounts": {
+      "title": "Chart of Account",
+      "description": "Categorias do plano de contas",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["REVENUE", "EXPENSE"] },
+        "dreGroup": { "type": "string", "enum": ["GROSS_REVENUE", "TAX", "VARIABLE_COST", "FIXED_COST", "NON_OPERATING", "INVESTMENT"] },
+        "parentId": { "type": "string" }
+      },
+      "required": ["companyId", "name", "type", "dreGroup"]
+    },
+    "bankAccounts": {
+      "title": "Bank Account",
+      "description": "Contas bancárias da empresa",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["CHECKING", "SAVINGS", "INVESTMENT", "CASH"] },
+        "initialBalance": { "type": "number" },
+        "currentBalance": { "type": "number" }
+      },
+      "required": ["name", "type", "initialBalance"]
+    },
+    "transfers": {
+      "title": "Transfer",
+      "description": "Transferências entre contas bancárias",
+      "type": "object",
+      "properties": {
+        "fromAccountId": { "type": "string" },
+        "toAccountId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" }
+      },
+      "required": ["fromAccountId", "toAccountId", "amount", "date"]
+    },
+    "transactions": {
+      "title": "Transaction",
+      "description": "Transações financeiras (receitas e despesas)",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "bankAccountId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["REVENUE", "EXPENSE"] },
+        "dateCompetence": { "type": "string", "format": "date-time" },
+        "datePayment": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "CANCELLED"] },
+        "isRecurring": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "categoryId", "bankAccountId", "description", "amount", "type", "dateCompetence", "status"]
+    }
+  },
+  "firestore": {
+    "/usuarios/{userId}": {
+      "schema": "usuarios",
+      "description": "Dados dos usuários do sistema"
+    },
+    "/roles/{roleId}": {
+      "schema": "roles",
+      "description": "Cargos e permissões"
+    },
+    "/companies/{companyId}": {
+      "schema": "companies",
+      "description": "Dados da empresa"
+    },
+    "/companies/{companyId}/chartOfAccounts/{categoryId}": {
+      "schema": "chartOfAccounts",
+      "description": "Plano de contas da empresa"
+    },
+    "/companies/{companyId}/bankAccounts/{accountId}": {
+      "schema": "bankAccounts",
+      "description": "Contas bancárias da empresa"
+    },
+    "/companies/{companyId}/transfers/{transferId}": {
+      "schema": "transfers",
+      "description": "Transferências entre contas"
+    },
+    "/companies/{companyId}/transactions/{transactionId}": {
+      "schema": "transactions",
+      "description": "Transações financeiras da empresa"
+    }
+  }
+}
