@@ -120,7 +120,7 @@ export const financeService = {
   async buscarPlanoDeContas(companyId: string) {
     try {
       const { data, error } = await supabase
-        .from('chart_of_accounts')
+        .from('categories')
         .select('*')
         .eq('company_id', companyId);
 
@@ -141,7 +141,7 @@ export const financeService = {
   async adicionarCategoria(companyId: string, categoria: Omit<ChartOfAccount, 'id'>) {
     try {
       const { data, error } = await supabase
-        .from('chart_of_accounts')
+        .from('categories')
         .insert([{
           company_id: companyId,
           name: categoria.name,
@@ -162,7 +162,7 @@ export const financeService = {
   async excluirCategoria(companyId: string, categoryId: string) {
     try {
       const { error } = await supabase
-        .from('chart_of_accounts')
+        .from('categories')
         .delete()
         .eq('id', categoryId);
 
@@ -470,7 +470,7 @@ export const financeService = {
 
   async exportarBackupCompleto(companyId: string) {
     try {
-      const tables = ['transactions', 'transfers', 'bank_accounts', 'chart_of_accounts', 'company_configs', 'profiles', 'roles'];
+      const tables = ['transactions', 'transfers', 'bank_accounts', 'categories', 'company_configs', 'profiles', 'roles'];
       const backup: any = {};
       
       await Promise.all(tables.map(async (table) => {

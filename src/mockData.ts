@@ -16,9 +16,11 @@ export async function popularDadosTeste(companyId: string) {
   const catIds: string[] = [];
   for (const cat of categorias) {
     const id = await financeService.adicionarCategoria(companyId, {
-      ...cat,
-      companyId
-    } as any);
+      companyId,
+      name: cat.name,
+      type: cat.type as any,
+      dreGroup: cat.dreGroup as any
+    });
     if (id) catIds.push(id);
   }
 

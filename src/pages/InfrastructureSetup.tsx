@@ -4,14 +4,17 @@ import { isConfigured, supabase, getSupabaseUrl } from '../supabase';
 import { cn } from '../lib/utils';
 import { motion } from 'motion/react';
 
-const REQUIRED_SQL = `-- 1. Criar Tabela de Cargos
+const REQUIRED_SQL = `-- 1. Extensões Necessárias
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- 2. Criar Tabela de Cargos
 CREATE TABLE IF NOT EXISTS roles (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. Criar Tabela de Perfis de Usuário
+-- 3. Criar Tabela de Perfis de Usuário
 CREATE TABLE IF NOT EXISTS profiles (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   name TEXT NOT NULL,
@@ -23,7 +26,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. Criar Tabela de Contas Bancárias
+-- 4. Criar Tabela de Contas Bancárias
 CREATE TABLE IF NOT EXISTS bank_accounts (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   company_id TEXT NOT NULL,
@@ -35,48 +38,48 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. Criar Tabela de Plano de Contas (Categorias)
-CREATE TABLE IF NOT EXISTS chart_of_accounts (
+-- 5. Criar Tabela de Categorias (Plano de Contas)
+CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   company_id TEXT NOT NULL,
   name TEXT NOT NULL,
   type TEXT CHECK (type IN ('REVENUE', 'EXPENSE')),
-  dre_group TEXT,
+  dre_group TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. Criar Tabela de Transações
+-- 6. Criar Tabela de Transações
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   company_id TEXT NOT NULL,
   description TEXT NOT NULL,
   amount NUMERIC NOT NULL,
   type TEXT CHECK (type IN ('REVENUE', 'EXPENSE')),
-  category_id TEXT REFERENCES chart_of_accounts(id),
-  bank_account_id TEXT REFERENCES bank_accounts(id),
+  category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+  bank_account_id TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
   status TEXT CHECK (status IN ('PAID', 'PENDING')),
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
-  user_id TEXT REFERENCES profiles(id),
+  user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
   is_conciliated BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 6. Criar Tabela de Transferências
+-- 7. Criar Tabela de Transferências
 CREATE TABLE IF NOT EXISTS transfers (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   company_id TEXT NOT NULL,
-  from_account_id TEXT REFERENCES bank_accounts(id),
-  to_account_id TEXT REFERENCES bank_accounts(id),
+  from_account_id TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
+  to_account_id TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
   amount NUMERIC NOT NULL,
   date TIMESTAMPTZ NOT NULL,
   description TEXT,
-  user_id TEXT REFERENCES profiles(id),
+  user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
   is_conciliated BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 7. Criar Tabela de Configurações da Empresa
+-- 8. Criar Tabela de Configurações da Empresa
 CREATE TABLE IF NOT EXISTS company_configs (
   company_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -84,16 +87,35 @@ CREATE TABLE IF NOT EXISTS company_configs (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 8. Configuração de Storage Buckets (Execute no SQL Editor para habilitar acesso público)
--- NOTA: Você deve criar manualmente os buckets 'avatars' e 'branding' no dashboard de Storage primeiro.
+-- 9. Habilitar Row Level Security (RLS)
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
 
--- Políticas para 'avatars' (Leitura pública)
-CREATE POLICY "Avatars são públicos" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
--- Políticas para 'branding' (Leitura pública)
-CREATE POLICY "Branding é público" ON storage.objects FOR SELECT USING (bucket_id = 'branding');
+-- 10. Políticas de Acesso (Simplificadas para o App - Permitir tudo para autenticados)
+-- Nota: Para produção real, restrinja por company_id ou user_id
+CREATE POLICY "Permitir tudo para usuários autenticados" ON roles FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON profiles FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON bank_accounts FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON categories FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON transactions FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON transfers FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON company_configs FOR ALL USING (true);
 
--- Habilitar RLS e Políticas de Escrita (Simplicado para MVP)
--- ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+-- 11. Configuração de Storage Buckets
+-- Execute estes comandos para permitir acesso público aos arquivos
+-- Certifique-se de criar os buckets 'avatars' e 'branding' no painel
+INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('branding', 'branding', true) ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Acesso Público Leitura - Avatars" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
+CREATE POLICY "Acesso Público Escrita - Avatars" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'avatars');
+CREATE POLICY "Acesso Público Leitura - Branding" ON storage.objects FOR SELECT USING (bucket_id = 'branding');
+CREATE POLICY "Acesso Público Escrita - Branding" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'branding');
 `;
 
 interface Props {
