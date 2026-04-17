@@ -134,8 +134,9 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
   };
 
   if (!configured) {
+    const isNextPublic = !!import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-bg flex items-center justify-center p-6 relative overflow-hidden text-text-primary">
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-lg bg-surface border border-border rounded-[2.5rem] shadow-2xl p-10 text-center space-y-8 relative z-10">
           <div className="w-20 h-20 bg-danger/10 rounded-3xl flex items-center justify-center text-danger mx-auto">
             <Server size={40} />
@@ -143,8 +144,23 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
           <div className="space-y-4">
             <h1 className="text-2xl font-bold tracking-tight">Erro de Configuração</h1>
             <p className="text-text-secondary text-sm leading-relaxed">
-              As variáveis de ambiente do <span className="text-accent font-bold">Supabase</span> não foram encontradas. 
-              Por favor, configure <code className="bg-bg px-2 py-1 rounded text-accent">VITE_SUPABASE_URL</code> e <code className="bg-bg px-2 py-1 rounded text-accent">VITE_SUPABASE_ANON_KEY</code> no seu painel de hospedagem (Vercel/Heroku).
+              As credenciais do <span className="text-accent font-bold">Supabase</span> não foram detectadas no ambiente.
+            </p>
+            <div className="bg-bg/50 border border-border p-4 rounded-2xl text-left space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Variáveis Necessárias:</p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <code className="text-accent">NEXT_PUBLIC_SUPABASE_URL</code>
+                  <span className="text-danger font-medium">Ausente</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <code className="text-accent">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+                  <span className="text-danger font-medium">Ausente</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-text-secondary text-xs italic">
+              Após configurar as chaves, você <strong>precisa realizar um novo Deploy</strong> na Vercel para que as alterações entrem em vigor.
             </p>
           </div>
           <div className="pt-6 border-t border-border flex flex-col items-center gap-4">

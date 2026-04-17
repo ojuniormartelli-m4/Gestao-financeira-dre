@@ -60,8 +60,19 @@ export default function App() {
 
   if (isSystemEmpty === null) {
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center">
-        <RefreshCw className="w-10 h-10 text-accent animate-spin" />
+      <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center p-6 text-center">
+        <div className="space-y-6">
+          <div className="relative">
+            <div className="w-12 h-12 border-4 border-accent/20 border-t-accent rounded-full animate-spin mx-auto" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-bold tracking-widest uppercase text-white/50">Carregando FinScale</p>
+            <p className="text-[10px] text-white/30 tracking-tight leading-relaxed">Verificando integridade do banco de dados...</p>
+          </div>
+        </div>
       </div>
     );
   }
