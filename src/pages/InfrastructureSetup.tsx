@@ -162,9 +162,9 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
             <Server size={40} />
           </div>
           <div className="space-y-4">
-            <h1 className="text-2xl font-bold tracking-tight">Erro de Configuração</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-red-500">Erro de Configuração</h1>
             <p className="text-gray-400 text-sm leading-relaxed">
-              As credenciais do <span className="text-sky-400 font-bold">Supabase</span> são necessárias para iniciar o sistema em produção.
+              Variáveis de Ambiente não encontradas na Vercel.
             </p>
             <div className="bg-black/40 border border-[#27272a] p-6 rounded-2xl text-left space-y-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Passo a Passo Vercel:</p>

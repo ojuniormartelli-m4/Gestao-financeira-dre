@@ -24,17 +24,17 @@ const getEnv = (key: string) => {
   }
 };
 
-const vUrl = getEnv('NEXT_PUBLIC_SUPABASE_URL');
-const vKey = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+const vUrl = getEnv('VITE_SUPABASE_URL') || getEnv('NEXT_PUBLIC_SUPABASE_URL');
+const vKey = getEnv('VITE_SUPABASE_ANON_KEY') || getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
 
 const supabaseUrl = vUrl || (isPreview ? SUPABASE_URL_DEFAULT : '');
 const supabaseAnonKey = vKey || (isPreview ? SUPABASE_KEY_DEFAULT : '');
 
-console.log('[FinScale] URL configurada:', supabaseUrl ? 'Sim' : 'Não');
-console.log('[FinScale] Key configurada:', supabaseAnonKey ? 'Sim' : 'Não');
+console.log('[FinScale] Supabase URL carregada:', !!supabaseUrl);
+console.log('[FinScale] Supabase Key carregada:', !!supabaseAnonKey);
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[FinScale] Alerta: Credenciais do Supabase não encontradas.');
+  console.warn('[FinScale] Erro de Configuração: Variáveis de Ambiente não encontradas na Vercel.');
 }
 
 export const supabase = createClient(
