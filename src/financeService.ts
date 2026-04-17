@@ -425,6 +425,7 @@ export const financeService = {
         .from('cost_centers')
         .select('*')
         .eq('company_id', normalizedCompanyId)
+        .eq('active', true)
         .order('name');
       if (error) throw error;
       return data || [];
@@ -497,6 +498,7 @@ export const financeService = {
         .from('payment_methods')
         .select('*')
         .eq('company_id', normalizedCompanyId)
+        .eq('active', true)
         .order('name');
       if (error) throw error;
       return data || [];

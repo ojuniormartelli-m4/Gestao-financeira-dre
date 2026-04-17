@@ -25,10 +25,11 @@ import {
 } from 'lucide-react';
 import { financeService } from '../financeService';
 import { aiService } from '../aiService';
+import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import { Transaction, ChartOfAccount, TransactionStatus } from '../types';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { format, startOfMonth, endOfMonth, parse } from 'date-fns';
-import { useAuth } from '../contexts/AuthContext';
 import { useFilter } from '../contexts/FilterContext';
 import Papa from 'papaparse';
 import { read, utils } from 'xlsx';
@@ -505,12 +506,6 @@ export function TransactionsPage() {
             setIsModalOpen(false);
             loadData();
           }}
-          categories={categories}
-          bankAccounts={accounts}
-          creditCards={creditCards}
-          costCenters={costCenters}
-          contacts={contacts}
-          paymentMethods={paymentMethods}
           companyId={companyId}
         />
       )}
@@ -948,12 +943,19 @@ function MappingField({ label, value, onChange, options, optional }: any) {
   );
 }
 
-function TransactionModal({ onClose, onSuccess, categories: initialCategories, bankAccounts: initialBanks, creditCards, costCenters, contacts, paymentMethods, companyId }: any) {
+function TransactionModal({ onClose, onSuccess, companyId }: any) {
   const { user } = useAuth();
-  const [categories, setCategories] = useState(initialCategories || []);
-  const [bankAccounts, setBankAccounts] = useState(initialBanks || []);
+  const { 
+    categories, 
+    bankAccounts, 
+    paymentMethods, 
+    costCenters, 
+    contacts, 
+    creditCards, 
+    refreshData 
+  } = useCompany();
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = React.useState({
     description: '',
     amount: '',
     category_id: '',
@@ -965,36 +967,23 @@ function TransactionModal({ onClose, onSuccess, categories: initialCategories, b
     dateCompetence: format(new Date(), 'yyyy-MM-dd'),
     datePayment: '',
     status: 'PENDING' as TransactionStatus,
-    bank_account_id: initialBanks[0]?.id || ''
+    bank_account_id: bankAccounts[0]?.id || ''
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = React.useState(false);
 
-  useEffect(() => {
-    console.log('Categorias no Modal:', categories);
-    console.log('Bancos no Modal:', bankAccounts);
+  React.useEffect(() => {
+    console.log('Dados do Contexto no Modal:', { categories, bankAccounts, paymentMethods, costCenters, contacts, creditCards });
+    if (categories.length === 0 || bankAccounts.length === 0) {
+      console.log('Modal: Contexto parece vazio, garantindo sincronização...');
+      refreshData();
+    }
   }, [categories, bankAccounts]);
 
-  useEffect(() => {
-    const refreshModalData = async () => {
-      if (categories.length === 0 || bankAccounts.length === 0) {
-        console.log('Modal: Listas vazias detectadas. Forçando recarregamento...');
-        try {
-          const [cats, banks] = await Promise.all([
-            financeService.buscarPlanoDeContas(companyId),
-            financeService.buscarContasBancarias(companyId)
-          ]);
-          setCategories(cats || []);
-          setBankAccounts(banks || []);
-          if (banks && banks.length > 0 && !formData.bank_account_id) {
-            setFormData(prev => ({ ...prev, bank_account_id: banks[0].id }));
-          }
-        } catch (error) {
-          console.error('Erro ao recarregar dados do modal:', error);
-        }
-      }
-    };
-    refreshModalData();
-  }, [companyId]);
+  React.useEffect(() => {
+    if (bankAccounts.length > 0 && !formData.bank_account_id) {
+      setFormData(prev => ({ ...prev, bank_account_id: bankAccounts[0].id }));
+    }
+  }, [bankAccounts]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1151,8 +1140,8 @@ function TransactionModal({ onClose, onSuccess, categories: initialCategories, b
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Forma de Pagamento</label>
               <select 
-                value={formData.paymentMethodId}
-                onChange={(e) => setFormData({ ...formData, paymentMethodId: e.target.value })}
+                value={formData.payment_method_id}
+                onChange={(e) => setFormData({ ...formData, payment_method_id: e.target.value })}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
               >
                 <option value="">Opcional...</option>
@@ -1165,16 +1154,16 @@ function TransactionModal({ onClose, onSuccess, categories: initialCategories, b
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão de Crédito?</label>
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão?</label>
               <select 
-                value={formData.creditCardId}
+                value={formData.credit_card_id}
                 onChange={(e) => {
                   const cardId = e.target.value;
                   const card = creditCards.find((c: any) => c.id === cardId);
                   setFormData({ 
                     ...formData, 
-                    creditCardId: cardId,
-                    bankAccountId: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
+                    credit_card_id: cardId,
+                    bank_account_id: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
                   });
                 }}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
@@ -1188,8 +1177,8 @@ function TransactionModal({ onClose, onSuccess, categories: initialCategories, b
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
               <select 
-                value={formData.costCenterId}
-                onChange={(e) => setFormData({ ...formData, costCenterId: e.target.value })}
+                value={formData.cost_center_id}
+                onChange={(e) => setFormData({ ...formData, cost_center_id: e.target.value })}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
               >
                 <option value="">Opcional...</option>
@@ -1201,8 +1190,8 @@ function TransactionModal({ onClose, onSuccess, categories: initialCategories, b
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Contato (Cliente/Fornecedor)</label>
               <select 
-                value={formData.contactId}
-                onChange={(e) => setFormData({ ...formData, contactId: e.target.value })}
+                value={formData.contact_id}
+                onChange={(e) => setFormData({ ...formData, contact_id: e.target.value })}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
               >
                 <option value="">Opcional...</option>

@@ -12,6 +12,13 @@ interface CompanyContextType {
   setCompanyConfig: (config: CompanyConfig) => void;
   loading: boolean;
   refreshConfig: () => Promise<void>;
+  bankAccounts: any[];
+  categories: any[];
+  paymentMethods: any[];
+  costCenters: any[];
+  contacts: any[];
+  creditCards: any[];
+  refreshData: () => Promise<void>;
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -19,6 +26,12 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [companyConfig, setCompanyConfigState] = useState<CompanyConfig>({ name: '', logoUrl: '' });
   const [loading, setLoading] = useState(true);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+  const [costCenters, setCostCenters] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [creditCards, setCreditCards] = useState<any[]>([]);
   const { user } = useAuth();
   const companyId = 'm4-digital';
 
@@ -30,6 +43,29 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Erro ao carregar configuração da empresa:', error);
+    }
+  };
+
+  const refreshData = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const [banks, cats, pms, ccs, cnts, cards] = await Promise.all([
+        financeService.buscarContasBancarias(companyId),
+        financeService.buscarPlanoDeContas(companyId),
+        financeService.buscarFormasPagamento(companyId),
+        financeService.buscarCentrosCusto(companyId),
+        financeService.buscarContatos(companyId),
+        financeService.buscarCartoesCredito(companyId)
+      ]);
+      setBankAccounts(banks || []);
+      setCategories(cats || []);
+      setPaymentMethods(pms || []);
+      setCostCenters(ccs || []);
+      setContacts(cnts || []);
+      setCreditCards(cards || []);
+    } catch (error) {
+      console.error('Erro ao carregar dados da empresa:', error);
     } finally {
       setLoading(false);
     }
@@ -37,7 +73,11 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user) {
-      refreshConfig();
+      const init = async () => {
+        await financeService.verificarEPovoarDadosIniciais(companyId);
+        await Promise.all([refreshConfig(), refreshData()]);
+      };
+      init();
     }
   }, [user]);
 
@@ -46,7 +86,19 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <CompanyContext.Provider value={{ companyConfig, setCompanyConfig, loading, refreshConfig }}>
+    <CompanyContext.Provider value={{ 
+      companyConfig, 
+      setCompanyConfig, 
+      loading, 
+      refreshConfig,
+      bankAccounts,
+      categories,
+      paymentMethods,
+      costCenters,
+      contacts,
+      creditCards,
+      refreshData
+    }}>
       {children}
     </CompanyContext.Provider>
   );
