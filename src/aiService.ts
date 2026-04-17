@@ -1,7 +1,36 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { DRELine } from "./types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!aiInstance) {
+    const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("[FinScale] GEMINI_API_KEY não configurada. Funcionalidades de IA estarão desabilitadas.");
+      return null;
+    }
+    aiInstance = new GoogleGenAI(apiKey);
+  }
+  return aiInstance;
+}
+
+async function callAI(prompt: string) {
+  const ai = getAI();
+  if (!ai) return null;
+
+  try {
+    // @ts-ignore
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Erro na chamada da IA:", error);
+    return null;
+  }
+}
 
 export const aiService = {
   async analisarSaudeFinanceira(dreData: any) {
@@ -15,16 +44,8 @@ export const aiService = {
     - Lucro Líquido: ${dreData.netProfit}
     `;
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-      return response.text;
-    } catch (error) {
-      console.error("Erro na análise da IA:", error);
-      return "Não foi possível gerar a análise no momento.";
-    }
+    const result = await callAI(prompt);
+    return result || "Não foi possível gerar a análise no momento.";
   },
 
   async responderChatFinanceiro(pergunta: string, contexto: any) {
@@ -36,16 +57,8 @@ export const aiService = {
     Pergunta: ${pergunta}
     `;
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-      return response.text;
-    } catch (error) {
-      console.error("Erro no chat da IA:", error);
-      return "Desculpe, tive um problema ao processar sua pergunta.";
-    }
+    const result = await callAI(prompt);
+    return result || "Desculpe, tive um problema ao processar sua pergunta.";
   },
 
   async projetarFluxoCaixa(historico: any[], pendentes: any[]) {
@@ -60,16 +73,8 @@ export const aiService = {
     Forneça uma projeção resumida e direta.
     `;
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-      return response.text;
-    } catch (error) {
-      console.error("Erro na projeção da IA:", error);
-      return "Não foi possível gerar a projeção no momento.";
-    }
+    const result = await callAI(prompt);
+    return result || "Não foi possível gerar a projeção no momento.";
   },
 
   async sugerirMapeamentoColunas(headers: string[], rows: any[]) {
@@ -87,15 +92,14 @@ export const aiService = {
     }
     `;
 
+    const result = await callAI(prompt);
+    if (!result) return null;
+
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-      const text = response.text.replace(/```json|```/g, "").trim();
+      const text = result.replace(/```json|```/g, "").trim();
       return JSON.parse(text);
     } catch (error) {
-      console.error("Erro no mapeamento da IA:", error);
+      console.error("Erro no mapeamento da IA (Parse):", error);
       return null;
     }
   },
@@ -113,15 +117,14 @@ export const aiService = {
     ["id1", "id2", "id3"]
     `;
 
+    const result = await callAI(prompt);
+    if (!result) return [];
+
     try {
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-      const text = response.text.replace(/```json|```/g, "").trim();
+      const text = result.replace(/```json|```/g, "").trim();
       return JSON.parse(text);
     } catch (error) {
-      console.error("Erro na sugestão de categorias da IA:", error);
+      console.error("Erro na sugestão de categorias da IA (Parse):", error);
       return [];
     }
   }
