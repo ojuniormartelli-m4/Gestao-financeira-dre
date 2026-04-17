@@ -60,7 +60,7 @@ export function DashboardPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [message, setMessage] = useState('');
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
   const navigate = useNavigate();
 
   const loadData = async () => {
@@ -80,6 +80,8 @@ export function DashboardPage() {
         financeService.buscarContasBancarias(companyId),
         financeService.buscarProximosVencimentos(companyId)
       ]);
+      
+      console.log('Dados brutos das contas:', banks);
       
       setDre(resultado);
       setTransactions(txs || []);
@@ -154,14 +156,23 @@ export function DashboardPage() {
 
   const selectedBank = bankAccounts.find(b => b.id === selectedBankId);
   const displayBalance = selectedBankId === 'all' 
-    ? bankAccounts.reduce((acc, b) => acc + (b.currentBalance || 0), 0)
-    : selectedBank?.currentBalance || 0;
+    ? bankAccounts.reduce((acc, b) => acc + (Number(b.currentBalance) || 0), 0)
+    : Number(selectedBank?.currentBalance || 0);
 
   const balanceLabel = selectedBankId === 'all' ? 'Saldo Total' : `Saldo: ${selectedBank?.name}`;
 
   useEffect(() => {
-    if (!authLoading && user) {
-      loadData();
+    const initData = async () => {
+      if (user && companyId) {
+        await financeService.verificarEPovoarDadosIniciais(companyId);
+        loadData();
+      }
+    };
+    
+    if (!authLoading) {
+      if (user) {
+        initData();
+      }
     }
   }, [user, authLoading, selectedBankId]);
 

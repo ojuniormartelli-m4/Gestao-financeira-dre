@@ -20,7 +20,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [companyConfig, setCompanyConfigState] = useState<CompanyConfig>({ name: '', logoUrl: '' });
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
 
   const refreshConfig = async () => {
     try {

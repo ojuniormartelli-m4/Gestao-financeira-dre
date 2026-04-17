@@ -18,7 +18,7 @@ const STEPS = [
 export function OnboardingPage({ onComplete }: OnboardingProps) {
   const [currentStep, setCurrentStep] = useState(0); // 0 = initial, 1-4 = steps, 5 = success
   const [loading, setLoading] = useState(false);
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
 
   const handleSetup = async () => {
     setLoading(true);

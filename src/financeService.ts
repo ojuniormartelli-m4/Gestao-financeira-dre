@@ -4,15 +4,20 @@ import { Transaction, TransactionStatus, DREGroup, ChartOfAccount } from './type
 export const financeService = {
   async adicionarTransacao(companyId: string, data: Omit<Transaction, 'id' | 'createdAt'> & { userId?: string }) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data: insertedData, error } = await supabase
         .from('transactions')
         .insert([{
-          company_id: companyId,
+          company_id: normalizedCompanyId,
           description: data.description,
           amount: data.amount,
           type: data.type,
           category_id: data.categoryId,
           bank_account_id: data.bankAccountId,
+          cost_center_id: data.costCenterId,
+          contact_id: data.contactId,
+          payment_method_id: data.paymentMethodId,
+          credit_card_id: data.creditCardId,
           status: data.status,
           date_competence: data.dateCompetence.toISOString(),
           date_payment: data.datePayment ? data.datePayment.toISOString() : null,
@@ -24,8 +29,8 @@ export const financeService = {
 
       if (error) throw error;
 
-      // Atualizar saldo da conta bancária se a transação estiver paga
-      if (data.status === 'PAID' && data.bankAccountId) {
+      // Atualizar saldo da conta bancária se a transação estiver paga e não for cartão de crédito
+      if (data.status === 'PAID' && data.bankAccountId && !data.creditCardId) {
         const { data: bank, error: bankError } = await supabase
           .from('bank_accounts')
           .select('current_balance')
@@ -35,8 +40,8 @@ export const financeService = {
         if (bank && !bankError) {
           const currentBalance = bank.current_balance || 0;
           const newBalance = data.type === 'REVENUE' 
-            ? currentBalance + data.amount 
-            : currentBalance - data.amount;
+            ? Number(currentBalance) + data.amount 
+            : Number(currentBalance) - data.amount;
           
           await supabase
             .from('bank_accounts')
@@ -54,12 +59,17 @@ export const financeService = {
 
   async editarTransacao(companyId: string, transactionId: string, data: Partial<Transaction>) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const updateData: any = {};
       if (data.description !== undefined) updateData.description = data.description;
       if (data.amount !== undefined) updateData.amount = data.amount;
       if (data.type !== undefined) updateData.type = data.type;
       if (data.categoryId !== undefined) updateData.category_id = data.categoryId;
       if (data.bankAccountId !== undefined) updateData.bank_account_id = data.bankAccountId;
+      if (data.costCenterId !== undefined) updateData.cost_center_id = data.costCenterId;
+      if (data.contactId !== undefined) updateData.contact_id = data.contactId;
+      if (data.paymentMethodId !== undefined) updateData.payment_method_id = data.paymentMethodId;
+      if (data.creditCardId !== undefined) updateData.credit_card_id = data.creditCardId;
       if (data.status !== undefined) updateData.status = data.status;
       if (data.dateCompetence) updateData.date_competence = data.dateCompetence.toISOString();
       if (data.datePayment) updateData.date_payment = data.datePayment.toISOString();
@@ -68,7 +78,8 @@ export const financeService = {
       const { error } = await supabase
         .from('transactions')
         .update(updateData)
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
     } catch (error) {
@@ -77,22 +88,38 @@ export const financeService = {
     }
   },
 
-  async buscarTransacoes(companyId: string, filters?: { startDate?: Date, endDate?: Date, bankAccountId?: string }) {
+  async buscarTransacoes(companyId: string, filters?: { startDate?: Date, endDate?: Date, bankAccountId?: string, costCenterId?: string, status?: string }) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      
+      console.log('Buscando transações entre:', filters?.startDate?.toISOString(), 'e', filters?.endDate?.toISOString());
+
       let queryBuilder = supabase
         .from('transactions')
         .select('*')
-        .eq('company_id', companyId)
+        .eq('company_id', normalizedCompanyId)
         .order('date_competence', { ascending: false });
       
       if (filters?.startDate) {
-        queryBuilder = queryBuilder.gte('date_competence', filters.startDate.toISOString());
+        // Garantir início do dia (00:00:00) para gte
+        const start = new Date(filters.startDate);
+        start.setHours(0, 0, 0, 0);
+        queryBuilder = queryBuilder.gte('date_competence', start.toISOString());
       }
       if (filters?.endDate) {
-        queryBuilder = queryBuilder.lte('date_competence', filters.endDate.toISOString());
+        // Garantir fim do dia (23:59:59) para lte
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        queryBuilder = queryBuilder.lte('date_competence', end.toISOString());
       }
       if (filters?.bankAccountId && filters.bankAccountId !== 'all') {
         queryBuilder = queryBuilder.eq('bank_account_id', filters.bankAccountId);
+      }
+      if (filters?.costCenterId && filters.costCenterId !== 'all') {
+        queryBuilder = queryBuilder.eq('cost_center_id', filters.costCenterId);
+      }
+      if (filters?.status && filters.status !== 'ALL') {
+        queryBuilder = queryBuilder.eq('status', filters.status);
       }
 
       const { data, error } = await queryBuilder;
@@ -105,6 +132,10 @@ export const financeService = {
         type: tx.type,
         categoryId: tx.category_id,
         bankAccountId: tx.bank_account_id,
+        costCenterId: tx.cost_center_id,
+        contactId: tx.contact_id,
+        paymentMethodId: tx.payment_method_id,
+        creditCardId: tx.credit_card_id,
         status: tx.status,
         dateCompetence: new Date(tx.date_competence),
         datePayment: tx.date_payment ? new Date(tx.date_payment) : undefined,
@@ -119,10 +150,11 @@ export const financeService = {
 
   async buscarPlanoDeContas(companyId: string) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data, error } = await supabase
         .from('chart_of_accounts')
         .select('*')
-        .eq('company_id', companyId);
+        .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
 
@@ -140,10 +172,11 @@ export const financeService = {
 
   async adicionarCategoria(companyId: string, categoria: Omit<ChartOfAccount, 'id'>) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data, error } = await supabase
         .from('chart_of_accounts')
         .insert([{
-          company_id: companyId,
+          company_id: normalizedCompanyId,
           name: categoria.name,
           type: categoria.type,
           dre_group: categoria.dreGroup
@@ -161,10 +194,12 @@ export const financeService = {
 
   async excluirCategoria(companyId: string, categoryId: string) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { error } = await supabase
         .from('chart_of_accounts')
         .delete()
-        .eq('id', categoryId);
+        .eq('id', categoryId)
+        .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
     } catch (error) {
@@ -175,21 +210,26 @@ export const financeService = {
 
   async buscarContasBancarias(companyId: string) {
     try {
-      console.log(`Buscando contas bancárias para empresa: ${companyId}`);
+      const normalizedCompanyId = String(companyId || '').trim();
+      console.log(`[financeService] Buscando contas bancárias para: ${normalizedCompanyId}`);
+      // Explicit select and filtering only by company_id to test RLS impacts
       const { data, error } = await supabase
         .from('bank_accounts')
         .select('*')
-        .eq('company_id', companyId);
+        .eq('company_id', normalizedCompanyId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[financeService] Erro ao buscar contas:', error);
+        throw error;
+      }
       
-      console.log(`Encontradas ${data?.length || 0} contas bancárias.`);
+      console.log(`[financeService] Contas retornadas pelo banco:`, data);
       return (data || []).map(item => ({
         id: item.id,
         name: item.name,
         bankName: item.bank_name,
-        initialBalance: item.initial_balance,
-        currentBalance: item.current_balance,
+        initialBalance: Number(item.initial_balance || 0),
+        currentBalance: Number(item.current_balance || 0),
         color: item.color
       }));
     } catch (error) {
@@ -200,10 +240,11 @@ export const financeService = {
 
   async adicionarContaBancaria(companyId: string, data: any) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data: insertedData, error } = await supabase
         .from('bank_accounts')
         .insert([{
-          company_id: companyId,
+          company_id: normalizedCompanyId,
           name: data.name,
           bank_name: data.bankName,
           initial_balance: Number(data.initialBalance),
@@ -223,10 +264,12 @@ export const financeService = {
 
   async excluirContaBancaria(companyId: string, accountId: string) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { error } = await supabase
         .from('bank_accounts')
         .delete()
-        .eq('id', accountId);
+        .eq('id', accountId)
+        .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
     } catch (error) {
@@ -237,10 +280,11 @@ export const financeService = {
 
   async realizarTransferencia(companyId: string, data: { fromAccountId: string, toAccountId: string, amount: number, date: Date, description?: string, userId?: string }) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data: insertedData, error } = await supabase
         .from('transfers')
         .insert([{
-          company_id: companyId,
+          company_id: normalizedCompanyId,
           from_account_id: data.fromAccountId,
           to_account_id: data.toAccountId,
           amount: data.amount,
@@ -273,10 +317,11 @@ export const financeService = {
 
   async buscarTodasTransacoes(companyId: string, bankAccountId?: string) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       let queryBuilder = supabase
         .from('transactions')
         .select('*')
-        .eq('company_id', companyId)
+        .eq('company_id', normalizedCompanyId)
         .order('date_competence', { ascending: false });
 
       if (bankAccountId && bankAccountId !== 'all') {
@@ -307,10 +352,12 @@ export const financeService = {
 
   async conciliarTransacao(companyId: string, transactionId: string, isConciliated: boolean) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { error } = await supabase
         .from('transactions')
         .update({ is_conciliated: isConciliated })
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
     } catch (error) {
@@ -319,12 +366,232 @@ export const financeService = {
     }
   },
 
+  async quitarTransacao(companyId: string, transactionId: string, status: TransactionStatus) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const now = new Date();
+      const { data: tx, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId)
+        .single();
+      
+      if (fetchError || !tx) throw fetchError || new Error('Transação não encontrada');
+
+      const { error } = await supabase
+        .from('transactions')
+        .update({ 
+          status, 
+          date_payment: status === 'PAID' ? now.toISOString() : null 
+        })
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId);
+
+      if (error) throw error;
+
+      // Se mudou para pago, atualizar saldo
+      if (status === 'PAID' && tx.bank_account_id) {
+        const { data: bank, error: bankError } = await supabase
+          .from('bank_accounts')
+          .select('current_balance')
+          .eq('id', tx.bank_account_id)
+          .single();
+
+        if (bank && !bankError) {
+          const currentBalance = bank.current_balance || 0;
+          const newBalance = tx.type === 'REVENUE' 
+            ? currentBalance + tx.amount 
+            : currentBalance - tx.amount;
+          
+          await supabase
+            .from('bank_accounts')
+            .update({ current_balance: newBalance })
+            .eq('id', tx.bank_account_id);
+        }
+      }
+    } catch (error) {
+      console.error('Supabase Error (quitarTransacao):', error);
+      throw error;
+    }
+  },
+
+  // Centros de Custo
+  async buscarCentrosCusto(companyId: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const { data, error } = await supabase
+        .from('cost_centers')
+        .select('*')
+        .eq('company_id', normalizedCompanyId)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Supabase Error (buscarCentrosCusto):', error);
+      throw error;
+    }
+  },
+
+  async salvarCentroCusto(companyId: string, data: any) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const payload = { ...data, company_id: normalizedCompanyId };
+      const { error } = await supabase
+        .from('cost_centers')
+        .upsert(payload);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase Error (salvarCentroCusto):', error);
+      throw error;
+    }
+  },
+
+  async excluirCentroCusto(id: string) {
+    const { error } = await supabase.from('cost_centers').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Contatos
+  async buscarContatos(companyId: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('company_id', normalizedCompanyId)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Supabase Error (buscarContatos):', error);
+      throw error;
+    }
+  },
+
+  async salvarContato(companyId: string, data: any) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const payload = { ...data, company_id: normalizedCompanyId };
+      const { error } = await supabase
+        .from('contacts')
+        .upsert(payload);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase Error (salvarContato):', error);
+      throw error;
+    }
+  },
+
+  async excluirContato(id: string) {
+    const { error } = await supabase.from('contacts').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  // Formas de Pagamento
+  async buscarFormasPagamento(companyId: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .eq('company_id', normalizedCompanyId)
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Supabase Error (buscarFormasPagamento):', error);
+      throw error;
+    }
+  },
+
+  async salvarFormaPagamento(companyId: string, data: any) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const payload = { ...data, company_id: normalizedCompanyId };
+      const { error } = await supabase
+        .from('payment_methods')
+        .upsert(payload);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase Error (salvarFormaPagamento):', error);
+      throw error;
+    }
+  },
+
+  async excluirFormaPagamento(id: string) {
+    const { error } = await supabase.from('payment_methods').delete().eq('id', id);
+    if (error) throw error;
+  },
+
+  async verificarEPovoarDadosIniciais(companyId: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      
+      // 1. Verificar se já existem categorias
+      const { data: existingCats, error: catError } = await supabase
+        .from('chart_of_accounts')
+        .select('id')
+        .eq('company_id', normalizedCompanyId)
+        .limit(1);
+      
+      if (catError) throw catError;
+
+      // Se não houver nada, povoamos os dados básicos
+      if (!existingCats || existingCats.length === 0) {
+        console.log(`[financeService] Povoando dados iniciais para a empresa: ${normalizedCompanyId}`);
+        
+        // Categorias Padrão
+        const defaultCategories = [
+          { company_id: normalizedCompanyId, name: 'Vendas de Produtos', type: 'REVENUE', dre_group: 'Receita Bruta' },
+          { company_id: normalizedCompanyId, name: 'Prestação de Serviços', type: 'REVENUE', dre_group: 'Receita Bruta' },
+          { company_id: normalizedCompanyId, name: 'Aluguel', type: 'EXPENSE', dre_group: 'Custos Fixos' },
+          { company_id: normalizedCompanyId, name: 'Salários', type: 'EXPENSE', dre_group: 'Custos Fixos' },
+          { company_id: normalizedCompanyId, name: 'Marketing', type: 'EXPENSE', dre_group: 'Custos Variáveis' },
+          { company_id: normalizedCompanyId, name: 'Impostos', type: 'EXPENSE', dre_group: 'Impostos' },
+          { company_id: normalizedCompanyId, name: 'Material de Escritório', type: 'EXPENSE', dre_group: 'Custos Fixos' }
+        ];
+
+        // Formas de Pagamento Padrão
+        const defaultPaymentMethods = [
+          { company_id: normalizedCompanyId, name: 'Dinheiro' },
+          { company_id: normalizedCompanyId, name: 'Pix' },
+          { company_id: normalizedCompanyId, name: 'Cartão de Crédito' },
+          { company_id: normalizedCompanyId, name: 'Cartão de Débito' },
+          { company_id: normalizedCompanyId, name: 'Transferência Bancária' },
+          { company_id: normalizedCompanyId, name: 'Boleto' }
+        ];
+
+        // Centros de Custo Padrão
+        const defaultCostCenters = [
+          { company_id: normalizedCompanyId, name: 'Administrativo' },
+          { company_id: normalizedCompanyId, name: 'Comercial' },
+          { company_id: normalizedCompanyId, name: 'Operacional' }
+        ];
+
+        await Promise.all([
+          supabase.from('chart_of_accounts').insert(defaultCategories),
+          supabase.from('payment_methods').insert(defaultPaymentMethods),
+          supabase.from('cost_centers').insert(defaultCostCenters)
+        ]);
+
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Supabase Error (verificarEPovoarDadosIniciais):', error);
+      return false;
+    }
+  },
+
   async conciliarTransferencia(companyId: string, transferId: string, isConciliated: boolean) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { error } = await supabase
         .from('transfers')
         .update({ is_conciliated: isConciliated })
-        .eq('id', transferId);
+        .eq('id', transferId)
+        .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
     } catch (error) {
@@ -335,8 +602,9 @@ export const financeService = {
 
   async importarTransacoes(companyId: string, bankAccountId: string, transactions: Omit<Transaction, 'id' | 'createdAt' | 'companyId'>[]) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const txsToInsert = transactions.map(tx => ({
-        company_id: companyId,
+        company_id: normalizedCompanyId,
         bank_account_id: bankAccountId,
         description: tx.description,
         amount: tx.amount,
@@ -372,11 +640,12 @@ export const financeService = {
 
   async buscarExtratoConta(companyId: string, accountId: string) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const [txResult, tfFromResult, tfToResult, bankResult] = await Promise.all([
-        supabase.from('transactions').select('*').eq('bank_account_id', accountId).order('date_competence', { ascending: true }),
-        supabase.from('transfers').select('*').eq('from_account_id', accountId).order('date', { ascending: true }),
-        supabase.from('transfers').select('*').eq('to_account_id', accountId).order('date', { ascending: true }),
-        supabase.from('bank_accounts').select('*').eq('id', accountId).single()
+        supabase.from('transactions').select('*').eq('bank_account_id', accountId).eq('company_id', normalizedCompanyId).order('date_competence', { ascending: true }),
+        supabase.from('transfers').select('*').eq('from_account_id', accountId).eq('company_id', normalizedCompanyId).order('date', { ascending: true }),
+        supabase.from('transfers').select('*').eq('to_account_id', accountId).eq('company_id', normalizedCompanyId).order('date', { ascending: true }),
+        supabase.from('bank_accounts').select('*').eq('id', accountId).eq('company_id', normalizedCompanyId).single()
       ]);
 
       if (bankResult.error || !bankResult.data) return null;
@@ -444,10 +713,11 @@ export const financeService = {
     seteDias.setDate(hoje.getDate() + 7);
 
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .eq('company_id', companyId)
+        .eq('company_id', normalizedCompanyId)
         .eq('status', 'PENDING')
         .gte('date_competence', hoje.toISOString())
         .lte('date_competence', seteDias.toISOString())
@@ -489,10 +759,11 @@ export const financeService = {
 
   async buscarConfiguracaoEmpresa(companyId: string) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { data, error } = await supabase
         .from('company_configs')
         .select('*')
-        .eq('company_id', companyId)
+        .eq('company_id', normalizedCompanyId)
         .single();
       
       if (error && error.code !== 'PGRST116') throw error; // PGRST116 is code for no rows returned
@@ -512,10 +783,11 @@ export const financeService = {
 
   async salvarConfiguracaoEmpresa(companyId: string, data: any) {
     try {
+      const normalizedCompanyId = String(companyId || '').trim();
       const { error } = await supabase
         .from('company_configs')
         .upsert({ 
-          company_id: companyId, 
+          company_id: normalizedCompanyId, 
           name: data.name, 
           logo_url: data.logoUrl 
         }, { onConflict: 'company_id' });
@@ -525,23 +797,148 @@ export const financeService = {
       console.error('Supabase Error (salvarConfiguracaoEmpresa):', error);
       throw error;
     }
+  },
+
+  async buscarExtratoPorConta(companyId: string, bankAccountId: string, month: number, year: number) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+
+      const { data, error } = await supabase
+        .from('transactions')
+        .select(`
+          *,
+          category:chart_of_accounts(name)
+        `)
+        .eq('company_id', normalizedCompanyId)
+        .eq('bank_account_id', bankAccountId)
+        .eq('status', 'PAID')
+        .gte('date_payment', startDate.toISOString())
+        .lte('date_payment', endDate.toISOString())
+        .order('date_payment', { ascending: true });
+
+      if (error) throw error;
+
+      return (data || []).map(tx => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount,
+        type: tx.type,
+        categoryName: tx.category?.name || 'N/A',
+        datePayment: new Date(tx.date_payment),
+        isConciliated: tx.is_conciliated
+      }));
+    } catch (error) {
+      console.error('Supabase Error (buscarExtratoPorConta):', error);
+      throw error;
+    }
+  },
+
+  async buscarFluxoDeCaixaReal(companyId: string, months: number = 6, bankAccountId?: string, costCenterId?: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+      
+      let queryBuilder = supabase
+        .from('transactions')
+        .select('amount, type, date_payment')
+        .eq('company_id', normalizedCompanyId)
+        .eq('status', 'PAID')
+        .gte('date_payment', startDate.toISOString());
+
+      if (bankAccountId && bankAccountId !== 'all') {
+        queryBuilder = queryBuilder.eq('bank_account_id', bankAccountId);
+      }
+      if (costCenterId && costCenterId !== 'all') {
+        queryBuilder = queryBuilder.eq('cost_center_id', costCenterId);
+      }
+
+      const { data, error } = await queryBuilder;
+
+      if (error) throw error;
+
+      return (data || []).map(tx => ({
+        amount: tx.amount,
+        type: tx.type,
+        date: new Date(tx.date_payment)
+      }));
+    } catch (error) {
+      console.error('Supabase Error (buscarFluxoDeCaixaReal):', error);
+      throw error;
+    }
+  },
+
+  async buscarCartoesCredito(companyId: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const { data, error } = await supabase
+        .from('credit_cards')
+        .select('*')
+        .eq('company_id', normalizedCompanyId);
+      if (error) throw error;
+      return (data || []).map(c => ({
+        id: c.id,
+        companyId: c.company_id,
+        name: c.name,
+        limit: c.credit_limit,
+        closingDay: c.closing_day,
+        dueDay: c.due_day,
+        bankAccountId: c.bank_account_id
+      }));
+    } catch (error) {
+      console.error('Supabase Error (buscarCartoesCredito):', error);
+      throw error;
+    }
+  },
+
+  async salvarCartaoCredito(companyId: string, data: any) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      const { error } = await supabase
+        .from('credit_cards')
+        .upsert({
+          company_id: normalizedCompanyId,
+          name: data.name,
+          credit_limit: data.limit,
+          closing_day: data.closingDay,
+          due_day: data.dueDay,
+          bank_account_id: data.bankAccountId
+        });
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase Error (salvarCartaoCredito):', error);
+      throw error;
+    }
+  },
+
+  async excluirCartaoCredito(id: string) {
+    try {
+      const { error } = await supabase.from('credit_cards').delete().eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Supabase Error (excluirCartaoCredito):', error);
+      throw error;
+    }
   }
 };
 
-export async function gerarDRE(companyId: string, mes: number, ano: number, bankAccountId?: string) {
+export async function gerarDRE(companyId: string, mes: number, ano: number, bankAccountId?: string, costCenterId?: string) {
+  const normalizedCompanyId = String(companyId || '').trim();
   const startDate = new Date(ano, mes - 1, 1);
   const endDate = new Date(ano, mes, 0, 23, 59, 59);
 
   const [transacoes, planoContas] = await Promise.all([
-    financeService.buscarTransacoes(companyId, { startDate, endDate }),
-    financeService.buscarPlanoDeContas(companyId)
+    financeService.buscarTransacoes(normalizedCompanyId, { startDate, endDate, bankAccountId, costCenterId }),
+    financeService.buscarPlanoDeContas(normalizedCompanyId)
   ]);
 
   if (!transacoes || !planoContas) return null;
 
   const categoriasMap = new Map(planoContas.map(c => [c.id, c]));
   
-  const dre = {
+  const dre: any = {
     GROSS_REVENUE: 0,
     TAX: 0,
     VARIABLE_COST: 0,
@@ -551,27 +948,32 @@ export async function gerarDRE(companyId: string, mes: number, ano: number, bank
     netRevenue: 0,
     contributionMargin: 0,
     ebitda: 0,
-    netProfit: 0
+    netProfit: 0,
+    groups: {}
   };
 
   transacoes.forEach(t => {
-    // Filtro por banco
-    if (bankAccountId && t.bankAccountId !== bankAccountId) return;
-
     const categoria = categoriasMap.get(t.categoryId);
     if (!categoria) return;
 
     const amount = t.amount;
-    if (categoria.dreGroup in dre) {
-      (dre as any)[categoria.dreGroup] += amount;
+    const groupKey = categoria.dreGroup;
+    
+    if (groupKey in dre) {
+      (dre as any)[groupKey] += amount;
     }
+
+    // Agrupar por categoria para detalhamento
+    if (!dre.groups[groupKey]) dre.groups[groupKey] = {};
+    if (!dre.groups[groupKey][categoria.name]) dre.groups[groupKey][categoria.name] = 0;
+    dre.groups[groupKey][categoria.name] += amount;
   });
 
   // Cálculos da DRE
   dre.netRevenue = dre.GROSS_REVENUE - dre.TAX;
   dre.contributionMargin = dre.netRevenue - dre.VARIABLE_COST;
   dre.ebitda = dre.contributionMargin - dre.FIXED_COST;
-  dre.netProfit = dre.ebitda - dre.NON_OPERATING; // Simplificado
+  dre.netProfit = dre.ebitda - dre.NON_OPERATING - dre.INVESTMENT;
 
   return dre;
 }

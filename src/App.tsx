@@ -11,11 +11,17 @@ import { TransactionsPage } from './pages/Transactions';
 import { DREPage } from './pages/DRE';
 import { SettingsPage } from './pages/Settings';
 import { CashFlowPage } from './pages/CashFlow';
+import { CostCentersPage } from './pages/CostCenters';
+import { ContactsPage } from './pages/Contacts';
+import { PaymentMethodsPage } from './pages/PaymentMethods';
+import { ExtractTransactionsPage } from './pages/ExtractTransactions';
+import { BalanceSheetPage } from './pages/BalanceSheet';
 import { OnboardingPage } from './pages/Onboarding';
 import { InfrastructureSetupPage } from './pages/InfrastructureSetup';
 import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { FilterProvider } from './contexts/FilterContext';
+import { SidebarProvider } from './contexts/SidebarContext';
 import { supabase, isConfigured } from './supabase';
 import { RefreshCw } from 'lucide-react';
 
@@ -87,17 +93,25 @@ export default function App() {
     <AuthProvider>
       <CompanyProvider>
         <FilterProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route index element={<DashboardPage />} />
-                <Route path="transacoes" element={<TransactionsPage />} />
-                <Route path="dre" element={<DREPage />} />
-                <Route path="fluxo-caixa" element={<CashFlowPage />} />
-                <Route path="configuracoes" element={<SettingsPage />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
+          <SidebarProvider>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<DashboardPage />} />
+                  <Route path="transacoes" element={<TransactionsPage />} />
+                  <Route path="dre" element={<DREPage />} />
+                  <Route path="dfc" element={<CashFlowPage />} />
+                  <Route path="fluxo-caixa" element={<CashFlowPage />} />
+                  <Route path="centros-custo" element={<CostCentersPage />} />
+                  <Route path="contatos" element={<ContactsPage />} />
+                  <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
+                  <Route path="extrato" element={<ExtractTransactionsPage />} />
+                  <Route path="balanco" element={<BalanceSheetPage />} />
+                  <Route path="configuracoes" element={<SettingsPage />} />
+                </Route>
+              </Routes>
+            </BrowserRouter>
+          </SidebarProvider>
         </FilterProvider>
       </CompanyProvider>
     </AuthProvider>

@@ -1,20 +1,17 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { DRELine } from "./types";
 
-let aiInstance: GoogleGenerativeAI | null = null;
+let aiInstance: GoogleGenAI | null = null;
 
 function getAI() {
   if (!aiInstance) {
-    const apiKey = 
-      import.meta.env.VITE_GEMINI_API_KEY || 
-      import.meta.env.NEXT_PUBLIC_GEMINI_API_KEY || 
-      process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       console.warn("[FinScale] GEMINI_API_KEY não configurada.");
       return null;
     }
-    aiInstance = new GoogleGenerativeAI(apiKey);
+    aiInstance = new GoogleGenAI({ apiKey });
   }
   return aiInstance;
 }
@@ -24,10 +21,11 @@ async function callAI(prompt: string) {
   if (!ai) return null;
 
   try {
-    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+    });
+    return response.text;
   } catch (error) {
     console.error("Erro na chamada da IA:", error);
     return null;

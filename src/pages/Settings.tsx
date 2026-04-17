@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { financeService } from '../financeService';
@@ -35,7 +36,37 @@ import { popularDadosTeste } from '../mockData';
 import { useTheme } from '../contexts/ThemeContext';
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM'>('CATEGORIES');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  
+  const getInitialTab = () => {
+    switch (tabParam) {
+      case 'categorias': return 'CATEGORIES';
+      case 'contas': return 'BANKS';
+      case 'usuarios': return 'USERS';
+      case 'cargos': return 'ROLES';
+      case 'sistema': return 'SYSTEM';
+      default: return 'CATEGORIES';
+    }
+  };
+
+  const [activeTab, setActiveTab] = useState<'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM'>(getInitialTab());
+
+  // Sincronizar tab ao mudar URL
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(getInitialTab());
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (tab: 'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM') => {
+    setActiveTab(tab);
+    const param = tab === 'CATEGORIES' ? 'categorias' : 
+                  tab === 'BANKS' ? 'contas' : 
+                  tab === 'USERS' ? 'usuarios' : 
+                  tab === 'ROLES' ? 'cargos' : 'sistema';
+    setSearchParams({ tab: param });
+  };
   const { theme, toggleTheme } = useTheme();
   const [categories, setCategories] = useState<ChartOfAccount[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -67,7 +98,7 @@ export function SettingsPage() {
   const { companyConfig: globalCompanyConfig, setCompanyConfig: setGlobalCompanyConfig } = useCompany();
 
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
 
   const handleSeedAuth = async () => {
     setSeedLoading(true);
@@ -371,11 +402,11 @@ export function SettingsPage() {
       </header>
 
       <div className="flex gap-2 p-1 bg-surface border border-border rounded-2xl w-fit">
-        <TabButton active={activeTab === 'CATEGORIES'} onClick={() => setActiveTab('CATEGORIES')} icon={<Tag size={16} />} label="Categorias" />
-        <TabButton active={activeTab === 'BANKS'} onClick={() => setActiveTab('BANKS')} icon={<Building2 size={16} />} label="Bancos" />
-        <TabButton active={activeTab === 'USERS'} onClick={() => setActiveTab('USERS')} icon={<Users size={16} />} label="Usuários" />
-        <TabButton active={activeTab === 'ROLES'} onClick={() => setActiveTab('ROLES')} icon={<Shield size={16} />} label="Cargos" />
-        <TabButton active={activeTab === 'SYSTEM'} onClick={() => setActiveTab('SYSTEM')} icon={<Monitor size={16} />} label="Sistema" />
+        <TabButton active={activeTab === 'CATEGORIES'} onClick={() => handleTabChange('CATEGORIES')} icon={<Tag size={16} />} label="Categorias" />
+        <TabButton active={activeTab === 'BANKS'} onClick={() => handleTabChange('BANKS')} icon={<Building2 size={16} />} label="Bancos" />
+        <TabButton active={activeTab === 'USERS'} onClick={() => handleTabChange('USERS')} icon={<Users size={16} />} label="Usuários" />
+        <TabButton active={activeTab === 'ROLES'} onClick={() => handleTabChange('ROLES')} icon={<Shield size={16} />} label="Cargos" />
+        <TabButton active={activeTab === 'SYSTEM'} onClick={() => handleTabChange('SYSTEM')} icon={<Monitor size={16} />} label="Sistema" />
       </div>
 
       <div className="grid grid-cols-1 gap-8">

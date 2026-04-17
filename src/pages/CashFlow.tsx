@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { financeService } from '../financeService';
 import { useAuth } from '../contexts/AuthContext';
 import { useFilter } from '../contexts/FilterContext';
@@ -13,19 +13,22 @@ import {
   Wallet,
   Clock,
   ChevronRight,
-  Info
+  Info,
+  Printer,
+  FileText
 } from 'lucide-react';
 import { 
-  AreaChart, 
-  Area, 
+  BarChart, 
+  Bar, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip as ReTooltip, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  Legend
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
-import { format, addDays, startOfDay } from 'date-fns';
+import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useTheme } from '../contexts/ThemeContext';
 import { LoginPage } from './Login';
@@ -34,28 +37,30 @@ export function CashFlowPage() {
   const { theme } = useTheme();
   const { selectedBankId, setSelectedBankId } = useFilter();
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [upcomingTransactions, setUpcomingTransactions] = useState<any[]>([]);
+  const [costCenters, setCostCenters] = useState<any[]>([]);
+  const [selectedCostCenterId, setSelectedCostCenterId] = useState('all');
+  const [realHistory, setRealHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
 
   const loadData = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [banks, upcoming] = await Promise.all([
+      const [banks, history, centers] = await Promise.all([
         financeService.buscarContasBancarias(companyId),
-        financeService.buscarProximosVencimentos(companyId)
+        financeService.buscarFluxoDeCaixaReal(
+          companyId, 
+          6, 
+          selectedBankId !== 'all' ? selectedBankId : undefined,
+          selectedCostCenterId !== 'all' ? selectedCostCenterId : undefined
+        ),
+        financeService.buscarCentrosCusto(companyId)
       ]);
-      
       setBankAccounts(banks || []);
-      
-      const bankId = selectedBankId === 'all' ? undefined : selectedBankId;
-      const filteredUpcoming = bankId 
-        ? (upcoming || []).filter((t: any) => t.bankAccountId === bankId)
-        : (upcoming || []);
-      
-      setUpcomingTransactions(filteredUpcoming);
+      setRealHistory(history || []);
+      setCostCenters(centers || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -67,235 +72,180 @@ export function CashFlowPage() {
     if (!authLoading && user) {
       loadData();
     }
-  }, [user, authLoading, selectedBankId]);
+  }, [user, authLoading, selectedBankId, selectedCostCenterId]);
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <RefreshCw className="w-8 h-8 text-accent animate-spin" />
-      </div>
-    );
-  }
+  const chartData = useMemo(() => {
+    const months = [];
+    const now = new Date();
+    
+    for (let i = 5; i >= 0; i--) {
+      const date = subMonths(now, i);
+      const monthStart = startOfMonth(date);
+      const monthEnd = endOfMonth(date);
+      
+      const monthTxs = realHistory.filter(tx => 
+        tx.date >= monthStart && tx.date <= monthEnd
+      );
 
-  if (!user) {
-    return <LoginPage />;
-  }
+      const entries = monthTxs
+        .filter(tx => tx.type === 'REVENUE')
+        .reduce((sum, tx) => sum + tx.amount, 0);
 
-  const selectedBank = bankAccounts.find(b => b.id === selectedBankId);
-  const initialBalance = selectedBankId === 'all' 
-    ? bankAccounts.reduce((acc, b) => acc + (b.currentBalance || 0), 0)
-    : selectedBank?.currentBalance || 0;
+      const exits = monthTxs
+        .filter(tx => tx.type === 'EXPENSE')
+        .reduce((sum, tx) => sum + tx.amount, 0);
 
-  // Gerar dados para o gráfico de projeção (próximos 30 dias)
-  const projectionData = [];
-  let currentBalance = initialBalance;
-  const today = startOfDay(new Date());
+      months.push({
+        month: format(date, 'MMM/yy', { locale: ptBR }),
+        entradas: entries,
+        saidas: exits,
+        saldo: entries - exits
+      });
+    }
+    return months;
+  }, [realHistory]);
 
-  for (let i = 0; i < 30; i++) {
-    const date = addDays(today, i);
-    const dayTransactions = upcomingTransactions.filter(t => 
-      startOfDay(t.dateCompetence).getTime() === date.getTime()
-    );
+  const totalPeriodo = useMemo(() => {
+    const entries = realHistory.filter(t => t.type === 'REVENUE').reduce((s, t) => s + t.amount, 0);
+    const exits = realHistory.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
+    return { entries, exits, balance: entries - exits };
+  }, [realHistory]);
 
-    const dayChange = dayTransactions.reduce((acc, t) => {
-      return acc + (t.type === 'REVENUE' ? t.amount : -t.amount);
-    }, 0);
-
-    currentBalance += dayChange;
-
-    projectionData.push({
-      date: format(date, 'dd/MM'),
-      fullDate: format(date, "dd 'de' MMMM", { locale: ptBR }),
-      saldo: currentBalance,
-      movimentacao: dayChange
-    });
-  }
-
-  const totalEntradas = upcomingTransactions
-    .filter(t => t.type === 'REVENUE')
-    .reduce((acc, t) => acc + t.amount, 0);
-
-  const totalSaidas = upcomingTransactions
-    .filter(t => t.type === 'EXPENSE')
-    .reduce((acc, t) => acc + t.amount, 0);
+  if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
+  if (!user) return <LoginPage />;
 
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Fluxo de Caixa</h1>
-          <p className="text-text-secondary text-sm">Projeção de saldos e vencimentos</p>
+          <h1 className="text-2xl font-bold tracking-tight">Fluxo de Caixa (Realizado)</h1>
+          <p className="text-text-secondary text-sm">Entradas vs Saídas no regime de caixa</p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={16} />
-            <select 
-              value={selectedBankId}
-              onChange={(e) => setSelectedBankId(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-surface border border-border rounded-xl text-sm font-bold focus:outline-none focus:border-accent appearance-none cursor-pointer min-w-[200px]"
-            >
-              <option value="all">Todas as Contas</option>
-              {bankAccounts.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+        <div className="flex gap-2">
+          <div className="flex items-center gap-4 bg-surface p-2 px-4 rounded-xl border border-border">
+            <div className="flex items-center gap-2">
+              <Wallet className="text-accent" size={18} />
+              <select 
+                value={selectedBankId}
+                onChange={(e) => setSelectedBankId(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold focus:outline-none text-text-primary appearance-none cursor-pointer"
+              >
+                <option value="all">Todas as Contas</option>
+                {bankAccounts.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="w-px h-4 bg-border" />
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-accent" />
+              <select 
+                value={selectedCostCenterId}
+                onChange={(e) => setSelectedCostCenterId(e.target.value)}
+                className="bg-transparent border-none text-xs font-bold focus:outline-none text-text-primary appearance-none cursor-pointer"
+              >
+                <option value="all">Todos C. Custos</option>
+                {costCenters.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          <button 
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <Printer size={18} />
+            <span className="text-sm font-bold">Imprimir</span>
+          </button>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Chart */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-surface rounded-3xl border border-border p-8 shadow-xl">
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h3 className="font-bold text-lg">Projeção de Saldo (30 dias)</h3>
-                <p className="text-xs text-text-secondary">Baseado em contas a pagar e receber</p>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] font-bold uppercase text-text-secondary mb-1">Saldo Final Previsto</div>
-                <div className={cn(
-                  "text-xl font-black",
-                  projectionData[29].saldo >= 0 ? "text-success" : "text-danger"
+      <div className="bg-surface rounded-2xl border border-border shadow-xl p-8 mb-8">
+        <h3 className="font-black italic text-xl mb-8 flex items-center gap-2">
+          <TrendingUp className="text-success" size={24} />
+          Análise de Fluxo Mensal
+        </h3>
+        <div className="h-80 w-full mb-12">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} />
+              <XAxis 
+                dataKey="month" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: theme === 'dark' ? '#94a3b8' : '#64748b', fontSize: 10, fontWeight: 700 }} 
+              />
+              <YAxis 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{ fill: theme === 'dark' ? '#94a3b8' : '#64748b', fontSize: 10, fontWeight: 700 }}
+              />
+              <ReTooltip 
+                contentStyle={{ 
+                  backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff', 
+                  border: `1px solid ${theme === 'dark' ? '#334155' : '#e2e8f0'}`, 
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                }}
+                formatter={(val: number) => formatCurrency(val)}
+              />
+              <Legend wrapperStyle={{ paddingTop: 20, fontSize: 12, fontWeight: 600 }} />
+              <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={32} />
+              <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} barSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Tabela de Resumo Estilo Technical Dashboard */}
+        <div className="border border-border rounded-xl overflow-hidden mt-8">
+          <div className="grid grid-cols-4 gap-4 p-4 bg-bg/50 border-b border-border text-[10px] font-bold uppercase tracking-widest text-text-secondary">
+            <span>Mês Referência</span>
+            <span className="text-right">Entradas</span>
+            <span className="text-right">Saídas</span>
+            <span className="text-right">Saldo Líquido</span>
+          </div>
+          <div className="divide-y divide-border">
+            {[...chartData].reverse().map((data: any) => (
+              <div key={data.month} className="grid grid-cols-4 gap-4 p-4 hover:bg-white/5 transition-colors items-center">
+                <span className="text-xs font-bold font-mono uppercase">{data.month}</span>
+                <span className="text-xs font-mono text-success text-right font-medium">{formatCurrency(data.entradas)}</span>
+                <span className="text-xs font-mono text-danger text-right font-medium">{formatCurrency(data.saidas)}</span>
+                <span className={cn(
+                  "text-xs font-mono text-right font-black",
+                  data.saldo >= 0 ? "text-accent" : "text-danger"
                 )}>
-                  {formatCurrency(projectionData[29].saldo)}
-                </div>
+                  {formatCurrency(data.saldo)}
+                </span>
               </div>
-            </div>
-
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={projectionData}>
-                  <defs>
-                    <linearGradient id="colorSaldo" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="var(--accent)" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} />
-                  <XAxis 
-                    dataKey="date" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: theme === 'dark' ? '#94a3b8' : '#64748b', fontSize: 12 }} 
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: theme === 'dark' ? '#94a3b8' : '#64748b', fontSize: 12 }}
-                    tickFormatter={(value) => `R$ ${value}`}
-                  />
-                  <ReTooltip 
-                    contentStyle={{ 
-                      backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff', 
-                      border: `1px solid ${theme === 'dark' ? '#334155' : '#e2e8f0'}`, 
-                      borderRadius: '12px' 
-                    }}
-                    itemStyle={{ color: theme === 'dark' ? '#f8fafc' : '#1e293b' }}
-                    formatter={(value: number) => [formatCurrency(value), 'Saldo']}
-                    labelFormatter={(label, payload) => payload[0]?.payload?.fullDate || label}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="saldo" 
-                    stroke="var(--accent)" 
-                    strokeWidth={3}
-                    fillOpacity={1} 
-                    fill="url(#colorSaldo)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Stats Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-surface p-6 rounded-3xl border border-border shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-accent/10 rounded-xl text-accent"><Wallet size={20} /></div>
-                <span className="text-xs font-bold uppercase text-text-secondary">Saldo Atual</span>
-              </div>
-              <div className={cn("text-xl font-bold", initialBalance >= 0 ? "text-text-primary" : "text-danger")}>
-                {formatCurrency(initialBalance)}
-              </div>
-            </div>
-            <div className="bg-surface p-6 rounded-3xl border border-border shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-success/10 rounded-xl text-success"><ArrowUpRight size={20} /></div>
-                <span className="text-xs font-bold uppercase text-text-secondary">Total a Receber</span>
-              </div>
-              <div className="text-xl font-bold text-success">
-                +{formatCurrency(totalEntradas)}
-              </div>
-            </div>
-            <div className="bg-surface p-6 rounded-3xl border border-border shadow-lg">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-danger/10 rounded-xl text-danger"><ArrowDownRight size={20} /></div>
-                <span className="text-xs font-bold uppercase text-text-secondary">Total a Pagar</span>
-              </div>
-              <div className="text-xl font-bold text-danger">
-                -{formatCurrency(totalSaidas)}
-              </div>
-            </div>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* Sidebar: Upcoming List */}
-        <div className="space-y-6">
-          <div className="bg-surface rounded-3xl border border-border p-6 shadow-xl flex flex-col h-full">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <Clock className="text-accent" size={20} />
-                Próximos Lançamentos
-              </h3>
-            </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatsCard label="Consolidado Entradas" value={totalPeriodo.entries} type="revenue" />
+        <StatsCard label="Consolidado Saídas" value={totalPeriodo.exits} type="expense" />
+        <StatsCard label="Resultado Acumulado" value={totalPeriodo.balance} type="balance" />
+      </div>
+    </div>
+  );
+}
 
-            <div className="space-y-4 flex-1 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
-              {upcomingTransactions.length === 0 ? (
-                <div className="py-20 text-center text-text-secondary text-sm italic">
-                  Nenhum lançamento pendente para os próximos 30 dias.
-                </div>
-              ) : (
-                upcomingTransactions.map((tx) => (
-                  <div key={tx.id} className="group p-4 bg-bg/50 rounded-2xl border border-border hover:border-accent/30 transition-all">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className={cn(
-                        "px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider",
-                        tx.type === 'REVENUE' ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                      )}>
-                        {tx.type === 'REVENUE' ? 'Receita' : 'Despesa'}
-                      </div>
-                      <span className="text-[10px] font-bold text-text-secondary">{format(tx.dateCompetence, 'dd/MM')}</span>
-                    </div>
-                    <div className="text-sm font-bold text-text-primary mb-1 truncate">{tx.description}</div>
-                    <div className="flex justify-between items-center">
-                      <div className="text-[10px] text-text-secondary flex items-center gap-1">
-                        <Wallet size={10} />
-                        {bankAccounts.find(b => b.id === tx.bankAccountId)?.name || 'Conta'}
-                      </div>
-                      <div className={cn(
-                        "text-sm font-bold",
-                        tx.type === 'REVENUE' ? "text-success" : "text-danger"
-                      )}>
-                        {tx.type === 'REVENUE' ? '+' : '-'} {formatCurrency(tx.amount)}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-border">
-              <div className="bg-bg/50 p-4 rounded-2xl border border-border flex items-start gap-3">
-                <Info size={16} className="text-accent shrink-0 mt-0.5" />
-                <p className="text-[10px] text-text-secondary leading-relaxed">
-                  A projeção considera apenas transações com status <strong>PENDENTE</strong>. Transações já pagas/recebidas estão consolidadas no saldo atual.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+function StatsCard({ label, value, type }: any) {
+  const isPositive = value >= 0;
+  return (
+    <div className="bg-surface p-6 rounded-3xl border border-border shadow-lg">
+      <div className="text-[10px] font-bold uppercase text-text-secondary mb-2 tracking-widest">{label}</div>
+      <div className={cn(
+        "text-xl font-black",
+        type === 'revenue' ? "text-success" : 
+        type === 'expense' ? "text-danger" : 
+        isPositive ? "text-accent" : "text-danger"
+      )}>
+        {type === 'expense' && value > 0 ? '-' : ''}
+        {formatCurrency(Math.abs(value))}
       </div>
     </div>
   );

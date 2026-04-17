@@ -47,6 +47,48 @@ CREATE TABLE IF NOT EXISTS chart_of_accounts (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 5.1 Criar Tabela de Centros de Custo
+CREATE TABLE IF NOT EXISTS cost_centers (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 5.2 Criar Tabela de Contatos (Clientes/Fornecedores)
+CREATE TABLE IF NOT EXISTS contacts (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT CHECK (type IN ('CLIENT', 'SUPPLIER')),
+  document TEXT,
+  email TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 5.3 Criar Tabela de Formas de Pagamento
+CREATE TABLE IF NOT EXISTS payment_methods (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 5.4 Criar Tabela de Cartões de Crédito
+CREATE TABLE IF NOT EXISTS credit_cards (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  credit_limit NUMERIC DEFAULT 0,
+  closing_day INTEGER NOT NULL,
+  due_day INTEGER NOT NULL,
+  bank_account_id TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- 6. Criar Tabela de Transações
 CREATE TABLE IF NOT EXISTS transactions (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -56,6 +98,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   type TEXT CHECK (type IN ('REVENUE', 'EXPENSE')),
   category_id TEXT REFERENCES chart_of_accounts(id) ON DELETE SET NULL,
   bank_account_id TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
+  cost_center_id TEXT REFERENCES cost_centers(id) ON DELETE SET NULL,
+  contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+  payment_method_id TEXT REFERENCES payment_methods(id) ON DELETE SET NULL,
+  credit_card_id TEXT REFERENCES credit_cards(id) ON DELETE SET NULL,
   status TEXT CHECK (status IN ('PAID', 'PENDING')),
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
@@ -91,8 +137,12 @@ ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cost_centers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_methods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
 
 -- 10. Políticas de Acesso (Simplificadas para o App - Permitir tudo para autenticados)
@@ -101,6 +151,10 @@ CREATE POLICY "Permitir tudo para usuários autenticados" ON roles FOR ALL USING
 CREATE POLICY "Permitir tudo para usuários autenticados" ON profiles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON bank_accounts FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON chart_of_accounts FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON cost_centers FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON contacts FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON payment_methods FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON credit_cards FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON transactions FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON transfers FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON company_configs FOR ALL USING (true);

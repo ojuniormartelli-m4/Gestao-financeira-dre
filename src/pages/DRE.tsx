@@ -19,8 +19,10 @@ export function DREPage() {
   const [exporting, setExporting] = useState(false);
   const [filterDate, setFilterDate] = useState(new Date());
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [costCenters, setCostCenters] = useState<any[]>([]);
+  const [selectedCostCenterId, setSelectedCostCenterId] = useState('all');
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
 
   const exportToPDF = () => {
     if (!dre) return;
@@ -75,12 +77,20 @@ export function DREPage() {
     try {
       const month = filterDate.getMonth() + 1;
       const year = filterDate.getFullYear();
-      const [result, banks] = await Promise.all([
-        gerarDRE(companyId, month, year, selectedBankId !== 'all' ? selectedBankId : undefined),
-        financeService.buscarContasBancarias(companyId)
+      const [result, banks, centers] = await Promise.all([
+        gerarDRE(
+          companyId, 
+          month, 
+          year, 
+          selectedBankId !== 'all' ? selectedBankId : undefined,
+          selectedCostCenterId !== 'all' ? selectedCostCenterId : undefined
+        ),
+        financeService.buscarContasBancarias(companyId),
+        financeService.buscarCentrosCusto(companyId)
       ]);
       setDre(result);
       setBankAccounts(banks || []);
+      setCostCenters(centers || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -92,7 +102,7 @@ export function DREPage() {
     if (!authLoading && user) {
       loadDRE();
     }
-  }, [filterDate, selectedBankId, user, authLoading]);
+  }, [filterDate, selectedBankId, selectedCostCenterId, user, authLoading]);
 
   if (authLoading) {
     return (
@@ -130,30 +140,47 @@ export function DREPage() {
         </div>
       </header>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4 bg-surface p-4 rounded-2xl border border-border w-fit shadow-sm">
-        <div className="flex items-center gap-2">
-          <Calendar className="text-accent" size={20} />
-          <input 
-            type="month" 
-            value={format(filterDate, 'yyyy-MM')}
-            onChange={(e) => setFilterDate(new Date(e.target.value + '-02'))}
-            className="bg-transparent border-none text-sm font-bold focus:outline-none text-text-primary"
-          />
-        </div>
-        <div className="h-6 w-px bg-border hidden md:block" />
-        <div className="flex items-center gap-2">
-          <Wallet className="text-accent" size={20} />
-          <select 
-            value={selectedBankId}
-            onChange={(e) => setSelectedBankId(e.target.value)}
-            className="bg-transparent border-none text-sm font-bold focus:outline-none text-text-primary appearance-none cursor-pointer"
-          >
-            <option value="all">Todas as Contas</option>
-            {bankAccounts.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+      <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden mb-6">
+        <div className="flex flex-wrap items-center gap-0">
+          <div className="flex items-center gap-2 px-6 py-4 border-r border-border min-w-[200px]">
+            <Calendar className="text-accent" size={18} />
+            <input 
+              type="month" 
+              value={format(filterDate, 'yyyy-MM')}
+              onChange={(e) => setFilterDate(new Date(e.target.value + '-02'))}
+              className="bg-transparent border-none text-xs font-bold focus:outline-none text-text-primary uppercase tracking-tight"
+            />
+          </div>
+          
+          <div className="flex items-center gap-2 px-6 py-4 border-r border-border min-w-[200px]">
+            <Wallet className="text-accent" size={18} />
+            <select 
+              value={selectedBankId}
+              onChange={(e) => setSelectedBankId(e.target.value)}
+              className="bg-transparent border-none text-xs font-bold focus:outline-none text-text-primary appearance-none cursor-pointer pr-4"
+            >
+              <option value="all">Todas as Contas</option>
+              {bankAccounts.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 px-6 py-4 min-w-[200px]">
+            <div className="w-4 h-4 rounded bg-accent/10 flex items-center justify-center">
+              <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+            </div>
+            <select 
+              value={selectedCostCenterId}
+              onChange={(e) => setSelectedCostCenterId(e.target.value)}
+              className="bg-transparent border-none text-xs font-bold focus:outline-none text-text-primary appearance-none cursor-pointer pr-4"
+            >
+              <option value="all">Todos C. Custos</option>
+              {costCenters.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -170,46 +197,65 @@ export function DREPage() {
         <motion.div 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-surface rounded-3xl border border-border shadow-2xl overflow-hidden"
+          className="bg-surface rounded-2xl border border-border shadow-xl overflow-hidden"
         >
           {/* Header do Relatório */}
-          <div className="p-8 border-b border-border bg-bg/30 flex justify-between items-end">
+          <div className="p-8 border-b border-border bg-bg/10 flex justify-between items-start">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent mb-2">Relatório de Competência</div>
-              <h2 className="text-2xl font-bold">Resultado do Exercício</h2>
-              <p className="text-text-secondary text-sm mt-1">Período: {format(filterDate, 'MMMM yyyy')}</p>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent px-2 py-0.5 bg-accent/10 rounded">Competência Gerencial</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-success px-2 py-0.5 bg-success/10 rounded">Consolidado</span>
+              </div>
+              <h2 className="text-3xl font-black italic tracking-tight text-text-primary">Demonstrativo de Resultado</h2>
+              <div className="flex items-center gap-4 mt-2">
+                <p className="text-text-secondary text-xs font-medium uppercase tracking-widest">{format(filterDate, 'MMMM yyyy')}</p>
+                <div className="w-1 h-1 rounded-full bg-border" />
+                <p className="text-text-secondary text-xs font-medium uppercase tracking-widest">{companyId}</p>
+              </div>
             </div>
-            <div className="text-right">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-text-secondary mb-1">Status</div>
-              <div className="px-3 py-1 bg-success/10 text-success border border-success/20 rounded-full text-[10px] font-bold uppercase">Consolidado</div>
+            <div className="hidden sm:block">
+              <FileText className="text-border" size={48} strokeWidth={1} />
             </div>
           </div>
 
           {/* Corpo do Relatório */}
-          <div className="p-8 space-y-1">
-            <DREReportRow label="RECEITA BRUTA OPERACIONAL" value={dre.GROSS_REVENUE} type="total" />
-            <DREReportRow label="(-) Deduções e Impostos" value={dre.TAX} type="sub" indent />
+          <div className="p-8 space-y-px dre-print-container">
+            {/* Headers de Tabela Estilo Receita 1 */}
+            <div className="grid grid-cols-[1fr,auto] gap-4 mb-4 px-2">
+              <span className="font-serif italic text-[11px] uppercase tracking-wider text-text-secondary opacity-50">Descrição de Conta</span>
+              <span className="font-serif italic text-[11px] uppercase tracking-wider text-text-secondary opacity-50 text-right">Valor em BRL</span>
+            </div>
+
+            <DREReportRow label="RECEITA BRUTA OPERACIONAL" value={dre.GROSS_REVENUE} type="total" details={dre.groups.GROSS_REVENUE} />
+            <DREReportRow label="(-) Deduções e Impostos" value={dre.TAX} type="sub" indent details={dre.groups.TAX} />
             
-            <div className="h-4" />
-            <DREReportRow label="RECEITA LÍQUIDA" value={dre.netRevenue} type="main" />
-            <DREReportRow label="(-) Custos Variáveis (CPV/CMV)" value={dre.VARIABLE_COST} type="sub" indent />
+            <div className="h-6" />
+            <DREReportRow label="RECEITA LÍTQUIDA" value={dre.netRevenue} type="main" />
+            <DREReportRow label="(-) Custos Variáveis (CPV/CMV)" value={dre.VARIABLE_COST} type="sub" indent details={dre.groups.VARIABLE_COST} />
             
-            <div className="h-4" />
+            <div className="h-6" />
             <DREReportRow label="MARGEM DE CONTRIBUIÇÃO" value={dre.contributionMargin} type="main" color="text-accent" />
-            <DREReportRow label="(-) Despesas Fixas Operacionais" value={dre.FIXED_COST} type="sub" indent />
+            <DREReportRow label="(-) Despesas Fixas Operacionais" value={dre.FIXED_COST} type="sub" indent details={dre.groups.FIXED_COST} />
             
-            <div className="h-4" />
+            <div className="h-6" />
             <DREReportRow label="EBITDA (LAJIDA)" value={dre.ebitda} type="main" />
-            <DREReportRow label="(-) Resultado Não Operacional" value={dre.NON_OPERATING} type="sub" indent />
+            <DREReportRow label="(-) Resultado Não Operacional" value={dre.NON_OPERATING} type="sub" indent details={dre.groups.NON_OPERATING} />
+            <DREReportRow label="(-) Investimentos" value={dre.INVESTMENT} type="sub" indent details={dre.groups.INVESTMENT} />
             
-            <div className="h-8" />
-            <div className="bg-bg/50 p-6 rounded-2xl border border-border">
-              <DREReportRow 
-                label="LUCRO / PREJUÍZO LÍQUIDO" 
-                value={dre.netProfit} 
-                type="final" 
-                color={dre.netProfit >= 0 ? 'text-success' : 'text-danger'} 
-              />
+            <div className="h-12" />
+            <div className="bg-bg/40 p-1 rounded-xl border border-border">
+              <div className="p-6 bg-surface rounded-lg border border-border shadow-inner">
+                <DREReportRow 
+                  label="LUCRO / PREJUÍZO LÍQUIDO" 
+                  value={dre.netProfit} 
+                  type="final" 
+                  color={dre.netProfit >= 0 ? 'text-success' : 'text-danger'} 
+                />
+              </div>
+            </div>
+            
+            <div className="hidden print:block mt-20 pt-10 border-t border-border text-center">
+              <p className="text-sm font-bold text-text-secondary uppercase tracking-widest">Desenvolvido por M4 Marketing Digital</p>
             </div>
           </div>
 
@@ -226,7 +272,8 @@ export function DREPage() {
   );
 }
 
-function DREReportRow({ label, value, type, indent, color }: any) {
+function DREReportRow({ label, value, type, indent, color, details }: any) {
+  const [isOpen, setIsOpen] = useState(false);
   const styles = {
     total: "text-sm font-bold text-text-primary",
     main: "text-base font-bold text-text-primary border-b border-border/30 pb-2 mb-2",
@@ -234,16 +281,46 @@ function DREReportRow({ label, value, type, indent, color }: any) {
     final: "text-xl font-black tracking-tight"
   };
 
+  const hasDetails = details && Object.keys(details).length > 0;
+
   return (
-    <div className={cn(
-      "flex justify-between items-center py-2",
-      indent && "pl-8",
-      (styles as any)[type]
-    )}>
-      <span>{label}</span>
-      <span className={cn(color)}>
-        {formatCurrency(value)}
-      </span>
+    <div className="flex flex-col">
+      <div 
+        className={cn(
+          "flex justify-between items-center py-2",
+          indent && "pl-8",
+          (styles as any)[type],
+          hasDetails && "cursor-pointer hover:bg-white/5 rounded-lg px-2 -mx-2 transition-colors"
+        )}
+        onClick={() => hasDetails && setIsOpen(!isOpen)}
+      >
+        <span className="flex items-center gap-2">
+          {label}
+          {hasDetails && (
+            <span className={cn("text-[8px] px-1.5 py-0.5 rounded-full bg-accent/10 text-accent transition-transform", isOpen && "rotate-180")}>
+              ▼
+            </span>
+          )}
+        </span>
+        <span className={cn(color)}>
+          {formatCurrency(value)}
+        </span>
+      </div>
+      
+      {isOpen && hasDetails && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="pl-12 space-y-1 mb-2 border-l border-border/30 ml-8 md:ml-12"
+        >
+          {Object.entries(details).map(([catId, amount]: [string, any]) => (
+            <div key={catId} className="flex justify-between text-[11px] text-text-secondary py-1">
+              <span>{catId}</span>
+              <span>{formatCurrency(amount)}</span>
+            </div>
+          ))}
+        </motion.div>
+      )}
     </div>
   );
 }

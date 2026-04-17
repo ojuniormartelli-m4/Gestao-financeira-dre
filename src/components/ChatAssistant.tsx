@@ -14,7 +14,7 @@ export function ChatAssistant() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const companyId = 'minha-empresa-demo';
+  const companyId = 'm4-digital';
 
   useEffect(() => {
     if (scrollRef.current) {

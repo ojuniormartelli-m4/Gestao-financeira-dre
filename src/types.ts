@@ -43,11 +43,49 @@ export interface BankAccount {
   currentBalance: number;
 }
 
+export interface CostCenter {
+  id: string;
+  companyId: string;
+  name: string;
+  color?: string;
+  active: boolean;
+}
+
+export interface Contact {
+  id: string;
+  companyId: string;
+  name: string;
+  type: 'CLIENT' | 'SUPPLIER';
+  document?: string;
+  email?: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  companyId: string;
+  name: string;
+  active: boolean;
+}
+
+export interface CreditCard {
+  id: string;
+  companyId: string;
+  name: string;
+  limit: number;
+  closingDay: number;
+  dueDay: number;
+  bankAccountId: string;
+}
+
 export interface Transaction {
   id: string;
   companyId: string;
   categoryId: string;
   bankAccountId: string;
+  costCenterId?: string;
+  contactId?: string;
+  paymentMethodId?: string;
+  creditCardId?: string;
   description: string;
   amount: number;
   type: TransactionType;

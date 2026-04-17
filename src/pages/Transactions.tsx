@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import * as React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { 
   Plus, 
@@ -32,26 +33,64 @@ import { useFilter } from '../contexts/FilterContext';
 import Papa from 'papaparse';
 import { read, utils } from 'xlsx';
 import { LoginPage } from './Login';
+import { supabase } from '../supabase';
 
 export function TransactionsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { selectedBankId, setSelectedBankId } = useFilter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<ChartOfAccount[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [creditCards, setCreditCards] = useState<any[]>([]);
+  const [costCenters, setCostCenters] = useState<any[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<TransactionStatus | 'ALL'>('ALL');
+  
+  const initialStatus = (searchParams.get('status') as TransactionStatus | 'ALL') || 'ALL';
+  const [filterStatus, setFilterStatus] = useState<TransactionStatus | 'ALL'>(initialStatus);
+  
   const [filterDate, setFilterDate] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const { user, loading: authLoading } = useAuth();
-  
-  const companyId = 'minha-empresa-demo';
 
-  const handleToggleConciliation = async (tx: Transaction) => {
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (statusParam) {
+      setFilterStatus(statusParam as TransactionStatus | 'ALL');
+    } else {
+      setFilterStatus('ALL');
+    }
+  }, [searchParams]);
+
+  const updateStatusFilter = (status: TransactionStatus | 'ALL') => {
+    setFilterStatus(status);
+    const newParams = new URLSearchParams(searchParams);
+    if (status === 'ALL') {
+      newParams.delete('status');
+    } else {
+      newParams.set('status', status);
+    }
+    setSearchParams(newParams);
+  };
+  
+  const companyId = 'm4-digital';
+
+  // Debug Logs
+  console.log('ID da Empresa atual:', companyId);
+  console.log('Contas recebidas no componente:', accounts);
+
+  if (accounts.length === 0 && !loading) {
+    console.warn('Nenhuma conta encontrada para este companyId:', companyId);
+  }
+
+  const handleToggleStatus = async (tx: Transaction) => {
     try {
-      await financeService.conciliarTransacao(companyId, tx.id, !tx.isConciliated);
+      const newStatus = tx.status === 'PAID' ? 'PENDING' : 'PAID';
+      await financeService.quitarTransacao(companyId, tx.id, newStatus);
       loadData();
     } catch (error) {
       console.error(error);
@@ -88,18 +127,52 @@ export function TransactionsPage() {
     try {
       const start = startOfMonth(filterDate);
       const end = endOfMonth(filterDate);
-      const [txs, cats, banks] = await Promise.all([
+      const [txs, cats, banks, cards, cCenters, cnts, pMethods] = await Promise.all([
         financeService.buscarTransacoes(companyId, { 
           startDate: start, 
           endDate: end,
-          bankAccountId: selectedBankId === 'all' ? undefined : selectedBankId
+          bankAccountId: selectedBankId,
+          status: filterStatus
         }),
         financeService.buscarPlanoDeContas(companyId),
-        financeService.buscarContasBancarias(companyId)
+        financeService.buscarContasBancarias(companyId),
+        financeService.buscarCartoesCredito(companyId),
+        financeService.buscarCentrosCusto(companyId),
+        financeService.buscarContatos(companyId),
+        financeService.buscarFormasPagamento(companyId)
       ]);
+      
+      let finalBanks = banks || [];
+      
+      // Fallback: If no banks found with companyId, try without filter for debugging/test
+      if (finalBanks.length === 0) {
+        console.log('Tentando carregar bancos sem filtro de company_id para teste');
+        try {
+          const { data: allBanks } = await supabase.from('bank_accounts').select('*');
+          if (allBanks && allBanks.length > 0) {
+            console.log('Bancos encontrados sem filtro (DEBUG):', allBanks);
+            finalBanks = allBanks.map(item => ({
+              id: item.id,
+              name: item.name,
+              bankName: item.bank_name,
+              initialBalance: Number(item.initial_balance || 0),
+              currentBalance: Number(item.current_balance || 0),
+              color: item.color
+            }));
+          }
+        } catch (e) {
+          console.error('Erro no fallback de bancos:', e);
+        }
+      }
+
+      console.log("Contas carregadas no filtro:", finalBanks);
       setTransactions(txs || []);
       setCategories(cats || []);
-      setBankAccounts(banks || []);
+      setAccounts(finalBanks);
+      setCreditCards(cards || []);
+      setCostCenters(cCenters || []);
+      setContacts(cnts || []);
+      setPaymentMethods(pMethods || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -108,10 +181,14 @@ export function TransactionsPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user) {
-      loadData();
-    }
-  }, [filterDate, user, authLoading, selectedBankId]);
+    const initPage = async () => {
+      if (!authLoading && user) {
+        await financeService.verificarEPovoarDadosIniciais(companyId);
+        loadData();
+      }
+    };
+    initPage();
+  }, [filterDate, user, authLoading, selectedBankId, companyId]);
 
   if (authLoading) {
     return (
@@ -126,9 +203,8 @@ export function TransactionsPage() {
   }
 
   const filteredTransactions = transactions.filter(t => {
-    const matchesStatus = filterStatus === 'ALL' ? true : t.status === filterStatus;
     const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStatus && matchesSearch;
+    return matchesSearch;
   });
 
   return (
@@ -191,7 +267,10 @@ export function TransactionsPage() {
             className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
           >
             <option value="all">Todas as Contas</option>
-            {bankAccounts.map(b => (
+            {accounts.length === 0 && !loading && (
+              <option value="" disabled>Nenhuma conta encontrada</option>
+            )}
+            {accounts.map(b => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
           </select>
@@ -201,7 +280,7 @@ export function TransactionsPage() {
           {(['ALL', 'PAID', 'PENDING'] as const).map((status) => (
             <button
               key={status}
-              onClick={() => setFilterStatus(status)}
+              onClick={() => updateStatusFilter(status)}
               className={cn(
                 "flex-1 py-2 px-3 rounded-xl text-[10px] font-bold border transition-all uppercase tracking-wider",
                 filterStatus === status 
@@ -293,14 +372,14 @@ export function TransactionsPage() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button 
-                          onClick={() => handleToggleConciliation(tx)}
+                          onClick={() => handleToggleStatus(tx)}
                           className={cn(
                             "p-2 rounded-lg transition-all",
-                            tx.isConciliated 
+                            tx.status === 'PAID' 
                               ? "text-success bg-success/10" 
                               : "text-text-secondary hover:text-text-primary hover:bg-bg"
                           )}
-                          title={tx.isConciliated ? "Conciliado" : "Marcar como Conciliado"}
+                          title={tx.status === 'PAID' ? "Marcar como Pendente" : "Marcar como Pago"}
                         >
                           <CheckCircle2 size={18} />
                         </button>
@@ -326,7 +405,11 @@ export function TransactionsPage() {
             loadData();
           }}
           categories={categories}
-          bankAccounts={bankAccounts}
+          bankAccounts={accounts}
+          creditCards={creditCards}
+          costCenters={costCenters}
+          contacts={contacts}
+          paymentMethods={paymentMethods}
           companyId={companyId}
         />
       )}
@@ -338,14 +421,14 @@ export function TransactionsPage() {
             setIsTransferModalOpen(false);
             loadData();
           }}
-          bankAccounts={bankAccounts}
+          bankAccounts={accounts}
           companyId={companyId}
         />
       )}
 
       {isImportModalOpen && (
         <ImportModal 
-          bankAccounts={bankAccounts}
+          bankAccounts={accounts}
           categories={categories}
           companyId={companyId}
           onClose={() => setIsImportModalOpen(false)}
@@ -764,12 +847,16 @@ function MappingField({ label, value, onChange, options, optional }: any) {
   );
 }
 
-function TransactionModal({ onClose, onSuccess, categories, bankAccounts, companyId }: any) {
+function TransactionModal({ onClose, onSuccess, categories, bankAccounts, creditCards, costCenters, contacts, paymentMethods, companyId }: any) {
   const { user } = useAuth();
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
     categoryId: '',
+    costCenterId: '',
+    contactId: '',
+    paymentMethodId: '',
+    creditCardId: '',
     type: 'EXPENSE' as 'REVENUE' | 'EXPENSE',
     dateCompetence: format(new Date(), 'yyyy-MM-dd'),
     datePayment: '',
@@ -787,6 +874,10 @@ function TransactionModal({ onClose, onSuccess, categories, bankAccounts, compan
         amount: Number(formData.amount),
         dateCompetence: new Date(formData.dateCompetence + 'T12:00:00'),
         datePayment: formData.datePayment ? new Date(formData.datePayment + 'T12:00:00') : undefined,
+        costCenterId: formData.costCenterId || undefined,
+        contactId: formData.contactId || undefined,
+        paymentMethodId: formData.paymentMethodId || undefined,
+        creditCardId: formData.creditCardId || undefined,
         companyId,
         isRecurring: false,
         userId: user?.id
@@ -905,6 +996,9 @@ function TransactionModal({ onClose, onSuccess, categories, bankAccounts, compan
                 <option value="PAID">Pago</option>
               </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Conta Bancária</label>
               <select 
@@ -916,6 +1010,69 @@ function TransactionModal({ onClose, onSuccess, categories, bankAccounts, compan
                 <option value="">Selecione...</option>
                 {bankAccounts.map((b: any) => (
                   <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Forma de Pagamento</label>
+              <select 
+                value={formData.paymentMethodId}
+                onChange={(e) => setFormData({ ...formData, paymentMethodId: e.target.value })}
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+              >
+                <option value="">Opcional...</option>
+                {paymentMethods.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão de Crédito?</label>
+              <select 
+                value={formData.creditCardId}
+                onChange={(e) => {
+                  const cardId = e.target.value;
+                  const card = creditCards.find((c: any) => c.id === cardId);
+                  setFormData({ 
+                    ...formData, 
+                    creditCardId: cardId,
+                    bankAccountId: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
+                  });
+                }}
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+              >
+                <option value="">Não (Usar Conta Corrente)</option>
+                {creditCards.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
+              <select 
+                value={formData.costCenterId}
+                onChange={(e) => setFormData({ ...formData, costCenterId: e.target.value })}
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+              >
+                <option value="">Opcional...</option>
+                {costCenters.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Contato (Cliente/Fornecedor)</label>
+              <select 
+                value={formData.contactId}
+                onChange={(e) => setFormData({ ...formData, contactId: e.target.value })}
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+              >
+                <option value="">Opcional...</option>
+                {contacts.filter((c: any) => formData.type === 'REVENUE' ? c.type === 'CLIENT' : c.type === 'SUPPLIER').map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
