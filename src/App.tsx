@@ -24,6 +24,8 @@ export default function App() {
   const [isTableMissing, setIsTableMissing] = React.useState<boolean>(false);
   const [isSystemEmpty, setIsSystemEmpty] = React.useState<boolean | null>(null);
 
+  console.log('[FinScale] App State:', { isSupabaseSetup, isTableMissing, isSystemEmpty });
+
   const checkSystemStatus = React.useCallback(async () => {
     if (!isSupabaseSetup) return;
     

@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Database, CheckCircle2, Copy, AlertCircle, RefreshCw, Server, ShieldCheck } from 'lucide-react';
 import { isConfigured, supabase, getSupabaseUrl } from '../supabase';
 import { cn } from '../lib/utils';
-import { motion } from 'motion/react';
 
 const REQUIRED_SQL = `-- 1. Extensões Necessárias
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -156,102 +155,98 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
   };
 
   if (!configured) {
-    const isNextPublic = !!import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
     return (
-      <div className="min-h-screen bg-bg flex items-center justify-center p-6 relative overflow-hidden text-text-primary">
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-lg bg-surface border border-border rounded-[2.5rem] shadow-2xl p-10 text-center space-y-8 relative z-10">
-          <div className="w-20 h-20 bg-danger/10 rounded-3xl flex items-center justify-center text-danger mx-auto">
+      <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center p-6 text-white text-center">
+        <div className="w-full max-w-lg bg-[#111114] border border-[#27272a] rounded-[2rem] p-10 space-y-8 shadow-2xl">
+          <div className="w-20 h-20 bg-red-500/10 rounded-3xl flex items-center justify-center text-red-500 mx-auto">
             <Server size={40} />
           </div>
           <div className="space-y-4">
             <h1 className="text-2xl font-bold tracking-tight">Erro de Configuração</h1>
-            <p className="text-text-secondary text-sm leading-relaxed">
-              As credenciais do <span className="text-accent font-bold">Supabase</span> não foram detectadas no ambiente.
+            <p className="text-gray-400 text-sm leading-relaxed">
+              As credenciais do <span className="text-sky-400 font-bold">Supabase</span> são necessárias para iniciar o sistema em produção.
             </p>
-            <div className="bg-bg/50 border border-border p-4 rounded-2xl text-left space-y-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Variáveis Necessárias:</p>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <code className="text-accent">NEXT_PUBLIC_SUPABASE_URL</code>
-                  <span className="text-danger font-medium">Ausente</span>
+            <div className="bg-black/40 border border-[#27272a] p-6 rounded-2xl text-left space-y-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Passo a Passo Vercel:</p>
+              <div className="space-y-3">
+                <p className="text-xs text-gray-300">1. Vá nas <strong>Settings</strong> do seu projeto na Vercel.</p>
+                <p className="text-xs text-gray-300">2. Adicione as <strong>Environment Variables</strong>:</p>
+                <div className="pl-4 space-y-2">
+                  <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_SUPABASE_URL</code>
+                  <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <code className="text-accent">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
-                  <span className="text-danger font-medium">Ausente</span>
-                </div>
+                <p className="text-xs text-gray-300">3. Realize um <strong>novo Deploy</strong> (Redeploy).</p>
               </div>
             </div>
-            <p className="text-text-secondary text-xs italic">
-              Após configurar as chaves, você <strong>precisa realizar um novo Deploy</strong> na Vercel para que as alterações entrem em vigor.
+          </div>
+          <div className="pt-6 border-t border-[#27272a] flex flex-col items-center gap-4">
+            <p className="text-[10px] text-gray-500 font-medium tracking-widest uppercase">
+              FinScale - Gestão Estratégica
             </p>
           </div>
-          <div className="pt-6 border-t border-border flex flex-col items-center gap-4">
-            <p className="text-[10px] text-text-secondary font-medium tracking-widest uppercase">
-              Desenvolvido por <span className="text-accent">M4 Marketing Digital</span>
-            </p>
-          </div>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-bg flex items-center justify-center p-6 relative overflow-hidden">
-      <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-accent/10 blur-[120px] rounded-full" />
-      <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-accent/5 blur-[120px] rounded-full" />
-
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl bg-surface border border-border rounded-[2.5rem] shadow-2xl p-8 md:p-12 relative z-10">
-        <div className="flex flex-col items-center text-center mb-10">
-          <div className="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center text-accent mb-6">
+    <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center p-6 text-white text-center font-sans">
+      <div className="w-full max-w-2xl bg-[#111114] border border-[#27272a] rounded-[2rem] p-8 md:p-12 shadow-2xl space-y-8">
+        <div className="flex flex-col items-center">
+          <div className="w-16 h-16 bg-sky-500/10 rounded-2xl flex items-center justify-center text-sky-500 mb-6">
             <Database size={32} />
           </div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">Inicialização do Banco</h1>
-          <p className="text-text-secondary text-sm">Detectamos que seu banco de dados está vazio ou incompleto.</p>
+          <p className="text-gray-400 text-sm">Detectamos que seu banco de dados está vazio ou incompleto.</p>
         </div>
 
         {error && (
-          <div className="mb-8 p-4 bg-danger/10 border border-danger/20 rounded-2xl flex items-center gap-3 text-danger text-sm">
+          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 text-sm italic">
             <AlertCircle size={18} />
             {error}
           </div>
         )}
 
-        <div className="space-y-8">
-          <div className="p-6 bg-accent/5 border border-accent/20 rounded-3xl space-y-4">
-            <div className="flex items-center gap-3 text-accent">
+        <div className="space-y-6">
+          <div className="p-6 bg-sky-500/5 border border-sky-500/20 rounded-3xl space-y-4 text-left">
+            <div className="flex items-center gap-3 text-sky-400">
               <ShieldCheck size={24} />
-              <h3 className="font-bold">Instruções de Inicialização</h3>
+              <h3 className="font-bold">Script SQL de Estrutura</h3>
             </div>
-            <p className="text-sm text-text-secondary leading-relaxed">
-              1. Copie o código SQL abaixo.<br/>
-              2. Vá no dashboard do Supabase (<span className="text-text-primary font-mono text-xs">{getSupabaseUrl()}</span>).<br/>
-              3. Cole e execute no <strong className="text-text-primary">SQL Editor</strong>.<br/>
-              4. <strong className="text-accent">Importante:</strong> Crie manualmente os buckets <code className="bg-bg px-1 rounded">avatars</code> e <code className="bg-bg px-1 rounded">branding</code> no menu Storage.
+            <p className="text-sm text-gray-400 leading-relaxed">
+              Copie o código abaixo e execute no <strong>SQL Editor</strong> do seu painel Supabase para criar as tabelas e permissões necessárias.
             </p>
             
             <div className="relative group">
-              <pre className="bg-bg border border-border rounded-2xl p-4 text-[10px] font-mono text-text-secondary h-44 overflow-y-auto">
+              <pre className="bg-black/60 border border-[#27272a] rounded-2xl p-4 text-[10px] font-mono text-gray-500 h-44 overflow-y-auto">
                 {REQUIRED_SQL}
               </pre>
-              <button onClick={handleCopySql} className="absolute top-2 right-2 p-2 bg-surface border border-border rounded-lg text-accent hover:border-accent transition-all flex items-center gap-2 text-[10px] font-bold">
+              <button 
+                onClick={handleCopySql} 
+                className="absolute top-2 right-2 px-3 py-1.5 bg-[#1c1c1f] border border-[#27272a] rounded-lg text-sky-400 hover:border-sky-500 transition-all flex items-center gap-2 text-[10px] font-bold"
+              >
                 {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-                {copied ? 'Copiado!' : 'Copiar Script SQL'}
+                {copied ? 'Copiado!' : 'Copiar Script'}
               </button>
             </div>
           </div>
 
-          <button onClick={handleFinalize} disabled={loading} className="w-full py-5 bg-accent text-bg rounded-2xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-all shadow-xl shadow-accent/20 disabled:opacity-50">
+          <button 
+            onClick={handleFinalize} 
+            disabled={loading} 
+            className="w-full py-5 bg-sky-500 text-black rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-sky-400 transition-all shadow-xl shadow-sky-500/10 disabled:opacity-50"
+          >
             {loading ? <RefreshCw className="animate-spin" /> : <CheckCircle2 size={18} />}
             Já executei o SQL. Finalizar!
           </button>
         </div>
 
-        <div className="mt-10 pt-10 border-t border-border/50 text-center">
-          <p className="text-[10px] text-text-secondary font-medium tracking-widest uppercase">
-            Desenvolvido por <span className="text-accent">M4 Marketing Digital</span>
+        <div className="pt-6 border-t border-[#27272a]/50 text-center">
+          <p className="text-[10px] text-gray-500 font-medium tracking-widest uppercase">
+            Desenvolvido por <span className="text-sky-400">M4 Marketing Digital</span>
           </p>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
