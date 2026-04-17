@@ -53,7 +53,11 @@ export function TransactionsPage() {
   const initialStatus = (searchParams.get('status') as TransactionStatus | 'ALL') || 'ALL';
   const [filterStatus, setFilterStatus] = useState<TransactionStatus | 'ALL'>(initialStatus);
   
+  const [filterType, setFilterType] = useState<'TODAY' | 'MONTH' | 'YEAR' | 'CUSTOM'>('MONTH');
   const [filterDate, setFilterDate] = useState(new Date());
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  const [customStartDate, setCustomStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [customEndDate, setCustomEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [searchTerm, setSearchTerm] = useState('');
   const { user, loading: authLoading } = useAuth();
 
@@ -125,8 +129,27 @@ export function TransactionsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const start = startOfMonth(filterDate);
-      const end = endOfMonth(filterDate);
+      let start: Date;
+      let end: Date;
+
+      if (filterType === 'TODAY') {
+        const today = new Date();
+        start = new Date(today.setHours(0, 0, 0, 0));
+        end = new Date(today.setHours(23, 59, 59, 999));
+      } else if (filterType === 'MONTH') {
+        start = startOfMonth(filterDate);
+        end = endOfMonth(filterDate);
+      } else if (filterType === 'YEAR') {
+        start = new Date(filterYear, 0, 1, 0, 0, 0, 0);
+        end = new Date(filterYear, 11, 31, 23, 59, 59, 999);
+      } else {
+        start = new Date(customStartDate + 'T00:00:00');
+        end = new Date(customEndDate + 'T23:59:59');
+      }
+
+      console.log('Filtro ativo:', filterType, { start: start.toISOString(), end: end.toISOString() });
+      console.log('Buscando transações entre:', start.toLocaleDateString(), 'e', end.toLocaleDateString());
+
       const [txs, cats, banks, cards, cCenters, cnts, pMethods] = await Promise.all([
         financeService.buscarTransacoes(companyId, { 
           startDate: start, 
@@ -142,6 +165,7 @@ export function TransactionsPage() {
         financeService.buscarFormasPagamento(companyId)
       ]);
       
+      console.log('Resultados da Busca:', txs);
       let finalBanks = banks || [];
       
       // Fallback: If no banks found with companyId, try without filter for debugging/test
@@ -166,6 +190,7 @@ export function TransactionsPage() {
       }
 
       console.log("Contas carregadas no filtro:", finalBanks);
+      console.log('Resultados da Busca:', txs);
       setTransactions(txs || []);
       setCategories(cats || []);
       setAccounts(finalBanks);
@@ -188,7 +213,7 @@ export function TransactionsPage() {
       }
     };
     initPage();
-  }, [filterDate, user, authLoading, selectedBankId, companyId]);
+  }, [filterType, filterDate, filterYear, customStartDate, customEndDate, user, authLoading, selectedBankId, companyId]);
 
   if (authLoading) {
     return (
@@ -248,60 +273,115 @@ export function TransactionsPage() {
       </header>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 bg-surface p-4 rounded-2xl border border-border shadow-sm">
-        <div className="relative">
-          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-          <input 
-            type="month" 
-            value={format(filterDate, 'yyyy-MM')}
-            onChange={(e) => setFilterDate(new Date(e.target.value + '-02'))}
-            className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors"
-          />
+      <div className="flex flex-col gap-4 bg-surface p-6 rounded-2xl border border-border shadow-sm">
+        <div className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
+          <div className="flex bg-bg p-1 rounded-xl border border-border">
+            {(['TODAY', 'MONTH', 'YEAR', 'CUSTOM'] as const).map((type) => (
+              <button
+                key={type}
+                onClick={() => setFilterType(type)}
+                className={cn(
+                  "px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+                  filterType === type 
+                    ? "bg-accent text-bg shadow-sm" 
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                {type === 'TODAY' ? 'Hoje' : type === 'MONTH' ? 'Mês' : type === 'YEAR' ? 'Ano' : 'Personalizado'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 flex items-center gap-2">
+            {filterType === 'MONTH' && (
+              <input 
+                type="month" 
+                value={format(filterDate, 'yyyy-MM')}
+                onChange={(e) => setFilterDate(new Date(e.target.value + '-02'))}
+                className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
+              />
+            )}
+            
+            {filterType === 'YEAR' && (
+              <select 
+                value={filterYear}
+                onChange={(e) => setFilterYear(Number(e.target.value))}
+                className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
+              >
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            )}
+
+            {filterType === 'CUSTOM' && (
+              <div className="flex items-center gap-2">
+                <input 
+                  type="date" 
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
+                />
+                <span className="text-text-secondary">até</span>
+                <input 
+                  type="date" 
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
+                />
+              </div>
+            )}
+            
+            {filterType === 'TODAY' && (
+              <div className="text-sm font-bold text-accent px-4 py-2 bg-accent/5 rounded-xl border border-accent/10">
+                {format(new Date(), 'dd/MM/yyyy')}
+              </div>
+            )}
+          </div>
+
+          <div className="relative min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar pela descrição..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
         </div>
         
-        <div className="relative">
-          <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-          <select 
-            value={selectedBankId}
-            onChange={(e) => setSelectedBankId(e.target.value)}
-            className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
-          >
-            <option value="all">Todas as Contas</option>
-            {accounts.length === 0 && !loading && (
-              <option value="" disabled>Nenhuma conta encontrada</option>
-            )}
-            {accounts.map(b => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex gap-2">
-          {(['ALL', 'PAID', 'PENDING'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => updateStatusFilter(status)}
-              className={cn(
-                "flex-1 py-2 px-3 rounded-xl text-[10px] font-bold border transition-all uppercase tracking-wider",
-                filterStatus === status 
-                  ? "bg-accent/10 border-accent/20 text-accent" 
-                  : "bg-bg border-border text-text-secondary hover:border-text-secondary/50"
-              )}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-[200px] relative">
+            <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
+            <select 
+              value={selectedBankId}
+              onChange={(e) => setSelectedBankId(e.target.value)}
+              className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
             >
-              {status === 'ALL' ? 'Todos' : status === 'PAID' ? 'Pago' : 'Pendente'}
-            </button>
-          ))}
-        </div>
+              <option value="all">Todas as Contas</option>
+              {accounts.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar transação..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors"
-          />
+          <div className="flex gap-2">
+            {(['ALL', 'PAID', 'PENDING'] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => updateStatusFilter(status)}
+                className={cn(
+                  "py-2 px-6 rounded-xl text-[10px] font-bold border transition-all uppercase tracking-wider",
+                  filterStatus === status 
+                    ? "bg-accent/10 border-accent/20 text-accent shadow-sm" 
+                    : "bg-bg border-border text-text-secondary hover:border-text-secondary/50"
+                )}
+              >
+                {status === 'ALL' ? 'Todos' : status === 'PAID' ? 'Pago' : 'Pendente'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

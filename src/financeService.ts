@@ -112,7 +112,8 @@ export const financeService = {
         end.setHours(23, 59, 59, 999);
         queryBuilder = queryBuilder.lte('date_competence', end.toISOString());
       }
-      if (filters?.bankAccountId && filters.bankAccountId !== 'all') {
+      
+      if (filters?.bankAccountId && filters.bankAccountId !== 'all' && filters.bankAccountId !== '') {
         queryBuilder = queryBuilder.eq('bank_account_id', filters.bankAccountId);
       }
       if (filters?.costCenterId && filters.costCenterId !== 'all') {
@@ -128,7 +129,7 @@ export const financeService = {
       return (data || []).map(tx => ({
         id: tx.id,
         description: tx.description,
-        amount: tx.amount,
+        amount: Number(tx.amount || 0),
         type: tx.type,
         categoryId: tx.category_id,
         bankAccountId: tx.bank_account_id,

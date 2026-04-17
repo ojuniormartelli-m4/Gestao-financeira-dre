@@ -12,6 +12,9 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
-export function formatDate(date: Date) {
-  return new Intl.DateTimeFormat('pt-BR').format(date);
+export function formatDate(date: Date | string | null | undefined) {
+  if (!date) return 'N/A';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return 'Inválido';
+  return new Intl.DateTimeFormat('pt-BR').format(d);
 }
