@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
 );
 
 -- 5. Criar Tabela de Categorias (Plano de Contas)
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE IF NOT EXISTS chart_of_accounts (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   company_id TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   description TEXT NOT NULL,
   amount NUMERIC NOT NULL,
   type TEXT CHECK (type IN ('REVENUE', 'EXPENSE')),
-  category_id TEXT REFERENCES categories(id) ON DELETE SET NULL,
+  category_id TEXT REFERENCES chart_of_accounts(id) ON DELETE SET NULL,
   bank_account_id TEXT REFERENCES bank_accounts(id) ON DELETE CASCADE,
   status TEXT CHECK (status IN ('PAID', 'PENDING')),
   date_competence TIMESTAMPTZ NOT NULL,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS company_configs (
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
@@ -100,7 +100,7 @@ ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir tudo para usuários autenticados" ON roles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON profiles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON bank_accounts FOR ALL USING (true);
-CREATE POLICY "Permitir tudo para usuários autenticados" ON categories FOR ALL USING (true);
+CREATE POLICY "Permitir tudo para usuários autenticados" ON chart_of_accounts FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON transactions FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON transfers FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON company_configs FOR ALL USING (true);
@@ -174,6 +174,7 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
                 <div className="pl-4 space-y-2">
                   <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_SUPABASE_URL</code>
                   <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
+                  <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_GEMINI_API_KEY (Opcional)</code>
                 </div>
                 <p className="text-xs text-gray-300">3. Realize um <strong>novo Deploy</strong> (Redeploy).</p>
               </div>

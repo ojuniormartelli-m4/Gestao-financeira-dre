@@ -120,7 +120,7 @@ export const financeService = {
   async buscarPlanoDeContas(companyId: string) {
     try {
       const { data, error } = await supabase
-        .from('categories')
+        .from('chart_of_accounts')
         .select('*')
         .eq('company_id', companyId);
 
@@ -141,7 +141,7 @@ export const financeService = {
   async adicionarCategoria(companyId: string, categoria: Omit<ChartOfAccount, 'id'>) {
     try {
       const { data, error } = await supabase
-        .from('categories')
+        .from('chart_of_accounts')
         .insert([{
           company_id: companyId,
           name: categoria.name,
@@ -162,7 +162,7 @@ export const financeService = {
   async excluirCategoria(companyId: string, categoryId: string) {
     try {
       const { error } = await supabase
-        .from('categories')
+        .from('chart_of_accounts')
         .delete()
         .eq('id', categoryId);
 
@@ -175,13 +175,15 @@ export const financeService = {
 
   async buscarContasBancarias(companyId: string) {
     try {
+      console.log(`Buscando contas bancárias para empresa: ${companyId}`);
       const { data, error } = await supabase
         .from('bank_accounts')
         .select('*')
         .eq('company_id', companyId);
 
       if (error) throw error;
-
+      
+      console.log(`Encontradas ${data?.length || 0} contas bancárias.`);
       return (data || []).map(item => ({
         id: item.id,
         name: item.name,
@@ -470,7 +472,7 @@ export const financeService = {
 
   async exportarBackupCompleto(companyId: string) {
     try {
-      const tables = ['transactions', 'transfers', 'bank_accounts', 'categories', 'company_configs', 'profiles', 'roles'];
+      const tables = ['transactions', 'transfers', 'bank_accounts', 'chart_of_accounts', 'company_configs', 'profiles', 'roles'];
       const backup: any = {};
       
       await Promise.all(tables.map(async (table) => {

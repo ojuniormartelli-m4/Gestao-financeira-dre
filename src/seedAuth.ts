@@ -34,7 +34,7 @@ export async function createChartOfAccounts(companyId: string) {
     { name: 'Receitas Financeiras', type: 'REVENUE', dre_group: 'NON_OPERATING' }
   ];
 
-  const { error } = await supabase.from('categories').insert(defaultCategories.map(cat => ({ ...cat, company_id: companyId })));
+  const { error } = await supabase.from('chart_of_accounts').insert(defaultCategories.map(cat => ({ ...cat, company_id: companyId })));
   if (error) throw error;
 }
 

@@ -1,7 +1,16 @@
 import { financeService } from './financeService';
+import { supabase } from './supabase';
 
 export async function popularDadosTeste(companyId: string) {
-  const categorias = [
+  try {
+    console.log('Limpando dados antigos para reset...');
+    // Limpar dados existentes para esta empresa (opcional, mas recomendado para demo)
+    await supabase.from('transactions').delete().eq('company_id', companyId);
+    await supabase.from('transfers').delete().eq('company_id', companyId);
+    await supabase.from('bank_accounts').delete().eq('company_id', companyId);
+    await supabase.from('chart_of_accounts').delete().eq('company_id', companyId);
+
+    const categorias = [
     { name: 'Venda de Produtos', type: 'REVENUE', dreGroup: 'GROSS_REVENUE' },
     { name: 'Prestação de Serviços', type: 'REVENUE', dreGroup: 'GROSS_REVENUE' },
     { name: 'Impostos sobre Vendas', type: 'EXPENSE', dreGroup: 'TAX' },
@@ -42,11 +51,30 @@ export async function popularDadosTeste(companyId: string) {
   ];
 
   console.log('Populando Transações...');
+  
+  // Garantir que existe ao menos uma conta bancária
+  let targetBankId = 'conta-padrao';
+  try {
+    const banks = await financeService.buscarContasBancarias(companyId);
+    if (!banks || banks.length === 0) {
+      targetBankId = await financeService.adicionarContaBancaria(companyId, {
+        name: 'Conta Principal',
+        bankName: 'Banco Digital',
+        initialBalance: 5000,
+        color: '#0ea5e9'
+      });
+    } else {
+      targetBankId = banks[0].id;
+    }
+  } catch (e) {
+    console.warn('Erro ao verificar/criar conta bancária para demo:', e);
+  }
+
   for (const t of transacoes) {
     await financeService.adicionarTransacao(companyId, {
       companyId,
       categoryId: catIds[t.catIdx],
-      bankAccountId: 'conta-padrao',
+      bankAccountId: targetBankId,
       description: t.desc,
       amount: t.val,
       type: categorias[t.catIdx].type as any,
@@ -58,4 +86,8 @@ export async function popularDadosTeste(companyId: string) {
   }
 
   console.log('Dados de teste populados com sucesso!');
+  } catch (error) {
+    console.error('Erro crítico em popularDadosTeste:', error);
+    throw error;
+  }
 }

@@ -41,10 +41,24 @@ export function ChatAssistant() {
       };
 
       const response = await aiService.responderChatFinanceiro(userMsg, contexto);
+      
+      if (response === "Inteligência Artificial não configurada.") {
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          text: 'Olá! Notei que a chave GEMINI_API_KEY não foi configurada na Vercel. Para usar o chat, adicione a chave nas configurações do seu projeto.' 
+        }]);
+        return;
+      }
+
       setMessages(prev => [...prev, { role: 'bot', text: response || 'Não consegui processar sua pergunta.' }]);
-    } catch (error) {
-      console.error(error);
-      setMessages(prev => [...prev, { role: 'bot', text: 'Ocorreu um erro ao buscar seus dados.' }]);
+    } catch (error: any) {
+      console.error('[FinScale Chat Error]', error);
+      const isMissingTable = error?.code === '42P01';
+      const msg = isMissingTable 
+        ? 'Erro: As tabelas do banco de dados não foram encontradas. Por favor, execute o script SQL nas configurações.'
+        : 'Ocorreu um erro ao buscar seus dados ou inicializar a IA.';
+      
+      setMessages(prev => [...prev, { role: 'bot', text: msg }]);
     } finally {
       setLoading(false);
     }
