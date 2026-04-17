@@ -207,9 +207,13 @@ export function TransactionsPage() {
 
   useEffect(() => {
     const initPage = async () => {
-      if (!authLoading && user) {
+      const isValidCompany = companyId && String(companyId) !== 'null' && String(companyId).trim() !== '';
+      if (!authLoading && user && isValidCompany) {
+        console.log(`[Transactions] Inicializando para empresa: ${companyId}`);
         await financeService.verificarEPovoarDadosIniciais(companyId);
         loadData();
+      } else {
+        console.log('[Transactions] Aguardando empresa válida ou usuário autenticado...');
       }
     };
     initPage();
@@ -409,10 +413,27 @@ export function TransactionsPage() {
                     </div>
                   </td>
                 </tr>
+              ) : transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-text-secondary italic">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="p-4 bg-bg rounded-full text-accent/50">
+                        <ArrowLeftRight size={32} />
+                      </div>
+                      <p>Nenhuma transação registrada nesta empresa.</p>
+                      <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="text-xs font-bold text-accent hover:underline"
+                      >
+                        Começar agora
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ) : filteredTransactions.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-text-secondary italic">
-                    Nenhuma transação encontrada para este período.
+                    Nenhum lançamento corresponde à sua busca ou filtro.
                   </td>
                 </tr>
               ) : (
@@ -927,37 +948,71 @@ function MappingField({ label, value, onChange, options, optional }: any) {
   );
 }
 
-function TransactionModal({ onClose, onSuccess, categories, bankAccounts, creditCards, costCenters, contacts, paymentMethods, companyId }: any) {
+function TransactionModal({ onClose, onSuccess, categories: initialCategories, bankAccounts: initialBanks, creditCards, costCenters, contacts, paymentMethods, companyId }: any) {
   const { user } = useAuth();
+  const [categories, setCategories] = useState(initialCategories || []);
+  const [bankAccounts, setBankAccounts] = useState(initialBanks || []);
+  
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
-    categoryId: '',
-    costCenterId: '',
-    contactId: '',
-    paymentMethodId: '',
-    creditCardId: '',
+    category_id: '',
+    cost_center_id: '',
+    contact_id: '',
+    payment_method_id: '',
+    credit_card_id: '',
     type: 'EXPENSE' as 'REVENUE' | 'EXPENSE',
     dateCompetence: format(new Date(), 'yyyy-MM-dd'),
     datePayment: '',
     status: 'PENDING' as TransactionStatus,
-    bankAccountId: bankAccounts[0]?.id || ''
+    bank_account_id: initialBanks[0]?.id || ''
   });
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    console.log('Categorias no Modal:', categories);
+    console.log('Bancos no Modal:', bankAccounts);
+  }, [categories, bankAccounts]);
+
+  useEffect(() => {
+    const refreshModalData = async () => {
+      if (categories.length === 0 || bankAccounts.length === 0) {
+        console.log('Modal: Listas vazias detectadas. Forçando recarregamento...');
+        try {
+          const [cats, banks] = await Promise.all([
+            financeService.buscarPlanoDeContas(companyId),
+            financeService.buscarContasBancarias(companyId)
+          ]);
+          setCategories(cats || []);
+          setBankAccounts(banks || []);
+          if (banks && banks.length > 0 && !formData.bank_account_id) {
+            setFormData(prev => ({ ...prev, bank_account_id: banks[0].id }));
+          }
+        } catch (error) {
+          console.error('Erro ao recarregar dados do modal:', error);
+        }
+      }
+    };
+    refreshModalData();
+  }, [companyId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
       await financeService.adicionarTransacao(companyId, {
-        ...formData,
+        description: formData.description,
         amount: Number(formData.amount),
+        categoryId: formData.category_id,
+        bankAccountId: formData.bank_account_id,
+        type: formData.type,
+        status: formData.status,
         dateCompetence: new Date(formData.dateCompetence + 'T12:00:00'),
         datePayment: formData.datePayment ? new Date(formData.datePayment + 'T12:00:00') : undefined,
-        costCenterId: formData.costCenterId || undefined,
-        contactId: formData.contactId || undefined,
-        paymentMethodId: formData.paymentMethodId || undefined,
-        creditCardId: formData.creditCardId || undefined,
+        costCenterId: formData.cost_center_id || undefined,
+        contactId: formData.contact_id || undefined,
+        paymentMethodId: formData.payment_method_id || undefined,
+        creditCardId: formData.credit_card_id || undefined,
         companyId,
         isRecurring: false,
         userId: user?.id
@@ -1042,8 +1097,8 @@ function TransactionModal({ onClose, onSuccess, categories, bankAccounts, credit
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Categoria</label>
               <select 
                 required
-                value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
               >
                 <option value="">Selecionar...</option>
@@ -1083,8 +1138,8 @@ function TransactionModal({ onClose, onSuccess, categories, bankAccounts, credit
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Conta Bancária</label>
               <select 
                 required
-                value={formData.bankAccountId}
-                onChange={(e) => setFormData({ ...formData, bankAccountId: e.target.value })}
+                value={formData.bank_account_id}
+                onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
               >
                 <option value="">Selecione...</option>
