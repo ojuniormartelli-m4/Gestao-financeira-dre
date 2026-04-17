@@ -1,17 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL_DEFAULT = 'https://hhrieawcfehdbjsayscv.supabase.co';
+const SUPABASE_KEY_DEFAULT = 'sb_publishable_5qqK8XZPiOBb9SWaphqWUg_GeKgQeD1';
 
-// Se não houver URL, usamos um placeholder para evitar erro crítico de inicialização, 
-// mas a função isConfigured() retornará falso.
-export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co', 
-  supabaseAnonKey || 'placeholder'
-);
+const supabaseUrl = import.meta.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL_DEFAULT;
+const supabaseAnonKey = import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || SUPABASE_KEY_DEFAULT;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const isConfigured = () => {
-  return !!supabaseUrl && !!supabaseAnonKey && supabaseUrl !== 'https://placeholder.supabase.co';
+  // Sempre retornamos true agora pois temos fallbacks para o preview
+  return true;
 };
 
 export const getSupabaseUrl = () => supabaseUrl;
