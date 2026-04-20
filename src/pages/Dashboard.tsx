@@ -24,7 +24,8 @@ import {
   CalendarDays,
   ChevronRight,
   Clock,
-  Filter
+  Filter,
+  Check
 } from 'lucide-react';
 import { 
   PieChart, 
@@ -72,10 +73,10 @@ export function DashboardPage() {
       
       const bankId = selectedBankId === 'all' ? undefined : selectedBankId;
 
-      const [resultado, resultadoAnterior, txs, banks, upcoming] = await Promise.all([
+      const [resultado, resultadoAnterior, allTxs, banks, upcoming] = await Promise.all([
         gerarDRE(companyId, mes, ano, bankId),
         gerarDRE(companyId, mes === 1 ? 12 : mes - 1, mes === 1 ? ano - 1 : ano, bankId),
-        financeService.buscarTodasTransacoes(companyId, selectedBankId),
+        financeService.buscarTodasTransacoes(companyId),
         financeService.buscarContasBancarias(companyId),
         financeService.buscarProximosVencimentos(companyId)
       ]);
@@ -83,8 +84,23 @@ export function DashboardPage() {
       console.log('Dados brutos das contas:', banks);
       
       setDre(resultado);
-      setTransactions(txs || []);
+      const filteredTxs = selectedBankId === 'all' ? (allTxs || []) : (allTxs || []).filter(t => t.bankAccountId === selectedBankId);
+      setTransactions(filteredTxs);
       setBankAccounts(banks || []);
+
+      // Calculate account stats (Confirmed vs Projected)
+      const accountsWithStats = (banks || []).map(acc => {
+        const accTxs = (allTxs || []).filter(t => t.bankAccountId === acc.id);
+        const confirmed = Number(acc.currentBalance || 0);
+        const pending = accTxs
+          .filter(t => t.status === 'PENDING' || t.status === 'SCHEDULED')
+          .reduce((sum, t) => sum + (t.type === 'REVENUE' ? Number(t.amount) : -Number(t.amount)), 0);
+        return {
+          ...acc,
+          projected: confirmed + pending
+        };
+      });
+      setBankAccounts(accountsWithStats);
       
       // Filtrar próximos vencimentos se um banco estiver selecionado
       const filteredUpcoming = bankId 
@@ -92,8 +108,8 @@ export function DashboardPage() {
         : (upcoming || []);
       setUpcomingTransactions(filteredUpcoming);
       
-      if (resultado && txs && txs.length > 0) {
-        runAIAnalysis(resultado, txs);
+      if (resultado && filteredTxs && filteredTxs.length > 0) {
+        runAIAnalysis(resultado, filteredTxs);
         detectAnomalies(resultado, resultadoAnterior);
       }
     } catch (error) {
@@ -270,6 +286,110 @@ export function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Saldos de Caixa Summary Card */}
+      <div className="bg-surface rounded-[2rem] border border-border overflow-hidden shadow-xl">
+        <div className="px-8 py-5 border-b border-border flex items-center justify-between bg-bg/20">
+          <h3 className="text-sm font-bold text-text-secondary uppercase tracking-widest flex items-center gap-2">
+            <Wallet size={16} className="text-accent" />
+            Saldos de caixa
+          </h3>
+          <div className="flex items-center gap-8 text-[10px] font-bold text-text-secondary uppercase tracking-widest mr-4">
+            <span className="w-24 text-right">Confirmado</span>
+            <span className="w-24 text-right">Projetado</span>
+          </div>
+        </div>
+        <div className="p-4 space-y-1">
+          {/* Global Toggle Row */}
+          <div 
+            className="flex items-center justify-between p-3 rounded-xl hover:bg-bg/40 transition-colors cursor-pointer group"
+            onClick={() => setSelectedBankId('all')}
+          >
+            <div className="flex items-center gap-4">
+              <div className="relative flex items-center">
+                <input 
+                  type="checkbox" 
+                  checked={selectedBankId === 'all'} 
+                  onChange={() => {}} // Handled by parent div click
+                  className="w-5 h-5 rounded-lg border-2 border-border checked:bg-accent checked:border-accent transition-all appearance-none cursor-pointer"
+                />
+                {selectedBankId === 'all' && <Check className="absolute left-1 top-1 text-bg pointer-events-none" size={12} strokeWidth={4} />}
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-accent/10 rounded-full flex items-center justify-center border border-accent/20">
+                  <div className="w-4 h-4 rounded-full bg-accent animate-pulse" />
+                </div>
+                <span className="text-sm font-bold text-text-primary">Visão Consolidada</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-8">
+              <span className="w-24 text-right text-sm font-bold text-text-primary">
+                {formatCurrency(bankAccounts.reduce((acc, b) => acc + (b.currentBalance || 0), 0))}
+              </span>
+              <span className="w-24 text-right text-sm font-bold text-accent">
+                {formatCurrency(bankAccounts.reduce((acc, b) => acc + (b.projected || 0), 0))}
+              </span>
+            </div>
+          </div>
+
+          {/* Individual Bank Rows */}
+          {bankAccounts.map(account => (
+            <div 
+              key={account.id}
+              className={cn(
+                "flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer group",
+                selectedBankId === account.id ? "bg-accent/10 border border-accent/20 shadow-inner" : "hover:bg-bg/40 border border-transparent"
+              )}
+              onClick={() => setSelectedBankId(account.id)}
+            >
+              <div className="flex items-center gap-4">
+                <div className="relative flex items-center">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedBankId === account.id} 
+                    onChange={() => {}} 
+                    className="w-5 h-5 rounded-lg border-2 border-border checked:bg-accent checked:border-accent transition-all appearance-none cursor-pointer"
+                  />
+                  {selectedBankId === account.id && <Check className="absolute left-1 top-1 text-bg pointer-events-none" size={12} strokeWidth={4} />}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-bg rounded-xl flex items-center justify-center border border-border shadow-sm overflow-hidden p-1.5">
+                    <div 
+                      className="w-full h-full rounded flex items-center justify-center text-[10px] font-black italic uppercase"
+                      style={{ backgroundColor: account.color || '#94a3b8', color: 'white' }}
+                    >
+                      {account.name.substring(0, 2)}
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-text-primary">{account.name}</span>
+                    <span className="text-[10px] text-text-secondary uppercase font-bold tracking-tighter opacity-60">Conta Corrente</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-8">
+                <span className="w-24 text-right text-sm font-mono font-bold text-success">
+                  {formatCurrency(account.currentBalance)}
+                </span>
+                <span className="w-24 text-right text-sm font-mono font-bold text-accent">
+                  {formatCurrency(account.projected)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-8 py-4 bg-bg/40 border-t border-border flex items-center justify-between">
+          <span className="text-sm font-black italic uppercase text-text-primary">Total</span>
+          <div className="flex items-center gap-8">
+            <span className="w-24 text-right text-base font-black text-success">
+              {formatCurrency(bankAccounts.reduce((acc, b) => acc + (b.currentBalance || 0), 0))}
+            </span>
+            <span className="w-24 text-right text-base font-black text-accent">
+              {formatCurrency(bankAccounts.reduce((acc, b) => acc + (b.projected || 0), 0))}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {transactions.length === 0 && selectedBankId === 'all' ? (
         <div className="flex flex-col items-center justify-center py-20 bg-surface rounded-[2.5rem] border border-border shadow-2xl text-center space-y-6 relative overflow-hidden">
