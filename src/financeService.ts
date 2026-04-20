@@ -5,29 +5,54 @@ export const financeService = {
   async adicionarTransacao(companyId: string, data: Omit<Transaction, 'id' | 'createdAt'> & { userId?: string }) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
-      const { data: insertedData, error } = await supabase
+      
+      // Criar objeto de inserção dinâmico para evitar erros se colunas opcionais não existirem no banco
+      const insertData: any = {
+        company_id: normalizedCompanyId,
+        description: data.description,
+        amount: data.amount,
+        type: data.type,
+        category_id: data.categoryId,
+        bank_account_id: data.bankAccountId,
+        status: data.status,
+        date_competence: data.dateCompetence.toISOString(),
+        date_payment: data.datePayment ? data.datePayment.toISOString() : null,
+        is_conciliated: false
+      };
+
+      // Só adiciona campos opcionais se eles tiverem valor
+      if (data.userId) insertData.user_id = data.userId;
+      if (data.costCenterId) insertData.cost_center_id = data.costCenterId;
+      if (data.contactId) insertData.contact_id = data.contactId;
+      if (data.paymentMethodId) insertData.payment_method_id = data.paymentMethodId;
+      if (data.creditCardId) insertData.credit_card_id = data.creditCardId;
+
+      let { data: insertedData, error } = await supabase
         .from('transactions')
-        .insert([{
-          company_id: normalizedCompanyId,
-          description: data.description,
-          amount: data.amount,
-          type: data.type,
-          category_id: data.categoryId,
-          bank_account_id: data.bankAccountId,
-          cost_center_id: data.costCenterId,
-          contact_id: data.contactId,
-          payment_method_id: data.paymentMethodId,
-          credit_card_id: data.creditCardId,
-          status: data.status,
-          date_competence: data.dateCompetence.toISOString(),
-          date_payment: data.datePayment ? data.datePayment.toISOString() : null,
-          user_id: data.userId,
-          is_conciliated: false
-        }])
+        .insert([insertData])
         .select()
         .single();
 
-      if (error) throw error;
+      // Fallback: Se falhar por causa do user_id (perfil inexistente), tentamos salvar sem vincular o usuário
+      if (error && error.code === '23503' && (error.message?.includes('user_id') || error.details?.includes('user_id'))) {
+        console.warn('[financeService] Vínculo de usuário falhou (perfil não encontrado). Tentando salvar sem user_id...');
+        const backupData = { ...insertData };
+        delete backupData.user_id;
+        
+        const retry = await supabase
+          .from('transactions')
+          .insert([backupData])
+          .select()
+          .single();
+        
+        insertedData = retry.data;
+        error = retry.error;
+      }
+
+      if (error) {
+        console.error('Erro detalhado do Supabase (Insert):', error);
+        throw error;
+      }
 
       // Atualizar saldo da conta bancária se a transação estiver paga e não for cartão de crédito
       if (data.status === 'PAID' && data.bankAccountId && !data.creditCardId) {
@@ -60,6 +85,17 @@ export const financeService = {
   async editarTransacao(companyId: string, transactionId: string, data: Partial<Transaction>) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
+      
+      // Buscar transação atual para comparar mudanças (necessário para saldo)
+      const { data: oldTx, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId)
+        .single();
+      
+      if (fetchError || !oldTx) throw fetchError || new Error('Transação não encontrada');
+
       const updateData: any = {};
       if (data.description !== undefined) updateData.description = data.description;
       if (data.amount !== undefined) updateData.amount = data.amount;
@@ -73,6 +109,9 @@ export const financeService = {
       if (data.status !== undefined) updateData.status = data.status;
       if (data.dateCompetence) updateData.date_competence = data.dateCompetence.toISOString();
       if (data.datePayment) updateData.date_payment = data.datePayment.toISOString();
+      else if (data.status === 'PAID' && !oldTx.date_payment) updateData.date_payment = new Date().toISOString();
+      else if (data.status === 'PENDING') updateData.date_payment = null;
+      
       if (data.isConciliated !== undefined) updateData.is_conciliated = data.isConciliated;
 
       const { error } = await supabase
@@ -82,8 +121,73 @@ export const financeService = {
         .eq('company_id', normalizedCompanyId);
 
       if (error) throw error;
+
+      // Lógica de saldo: se mudou status, valor ou conta bancária
+      const isPaidNow = (data.status || oldTx.status) === 'PAID';
+      const wasPaid = oldTx.status === 'PAID';
+      
+      // Se estava paga ou ficou paga agora, precisamos ajustar o saldo
+      if (isPaidNow || wasPaid) {
+        // Estornar antigo (se existia)
+        if (wasPaid && oldTx.bank_account_id) {
+          const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', oldTx.bank_account_id).single();
+          if (bank) {
+            const adj = oldTx.type === 'REVENUE' ? -oldTx.amount : oldTx.amount;
+            await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + adj }).eq('id', oldTx.bank_account_id);
+          }
+        }
+        
+        // Aplicar novo (se estiver pago)
+        if (isPaidNow) {
+          const finalBankId = data.bankAccountId || oldTx.bank_account_id;
+          const finalAmount = data.amount !== undefined ? data.amount : oldTx.amount;
+          const finalType = data.type || oldTx.type;
+          
+          if (finalBankId) {
+            const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', finalBankId).single();
+            if (bank) {
+              const adj = finalType === 'REVENUE' ? finalAmount : -finalAmount;
+              await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + adj }).eq('id', finalBankId);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Supabase Error (editarTransacao):', error);
+      throw error;
+    }
+  },
+
+  async excluirTransacao(companyId: string, transactionId: string) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      
+      const { data: tx, error: fetchError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId)
+        .single();
+      
+      if (fetchError || !tx) throw fetchError || new Error('Transação não encontrada');
+
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transactionId)
+        .eq('company_id', normalizedCompanyId);
+
+      if (error) throw error;
+
+      if (tx.status === 'PAID' && tx.bank_account_id) {
+        const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', tx.bank_account_id).single();
+        if (bank) {
+          const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
+          await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + adj }).eq('id', tx.bank_account_id);
+        }
+      }
+    } catch (error) {
+      console.error('Supabase Error (excluirTransacao):', error);
       throw error;
     }
   },
@@ -410,6 +514,25 @@ export const financeService = {
             .update({ current_balance: newBalance })
             .eq('id', tx.bank_account_id);
         }
+      } else if (status === 'PENDING' && tx.status === 'PAID' && tx.bank_account_id) {
+        // Se mudou de pago para pendente, estornar saldo
+        const { data: bank, error: bankError } = await supabase
+          .from('bank_accounts')
+          .select('current_balance')
+          .eq('id', tx.bank_account_id)
+          .single();
+
+        if (bank && !bankError) {
+          const currentBalance = bank.current_balance || 0;
+          const newBalance = tx.type === 'REVENUE' 
+            ? currentBalance - tx.amount 
+            : currentBalance + tx.amount;
+          
+          await supabase
+            .from('bank_accounts')
+            .update({ current_balance: newBalance })
+            .eq('id', tx.bank_account_id);
+        }
       }
     } catch (error) {
       console.error('Supabase Error (quitarTransacao):', error);
@@ -421,11 +544,12 @@ export const financeService = {
   async buscarCentrosCusto(companyId: string) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
+      // Incluir ativos ou nulos (que podem ter sido criados sem o campo active)
       const { data, error } = await supabase
         .from('cost_centers')
         .select('*')
         .eq('company_id', normalizedCompanyId)
-        .eq('active', true)
+        .or('active.eq.true,active.is.null')
         .order('name');
       if (error) throw error;
       return data || [];
@@ -494,11 +618,12 @@ export const financeService = {
   async buscarFormasPagamento(companyId: string) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
+      // Incluir ativos ou nulos
       const { data, error } = await supabase
         .from('payment_methods')
         .select('*')
         .eq('company_id', normalizedCompanyId)
-        .eq('active', true)
+        .or('active.eq.true,active.is.null')
         .order('name');
       if (error) throw error;
       return data || [];
@@ -557,19 +682,19 @@ export const financeService = {
 
         // Formas de Pagamento Padrão
         const defaultPaymentMethods = [
-          { company_id: normalizedCompanyId, name: 'Dinheiro' },
-          { company_id: normalizedCompanyId, name: 'Pix' },
-          { company_id: normalizedCompanyId, name: 'Cartão de Crédito' },
-          { company_id: normalizedCompanyId, name: 'Cartão de Débito' },
-          { company_id: normalizedCompanyId, name: 'Transferência Bancária' },
-          { company_id: normalizedCompanyId, name: 'Boleto' }
+          { company_id: normalizedCompanyId, name: 'Dinheiro', active: true },
+          { company_id: normalizedCompanyId, name: 'Pix', active: true },
+          { company_id: normalizedCompanyId, name: 'Cartão de Crédito', active: true },
+          { company_id: normalizedCompanyId, name: 'Cartão de Débito', active: true },
+          { company_id: normalizedCompanyId, name: 'Transferência Bancária', active: true },
+          { company_id: normalizedCompanyId, name: 'Boleto', active: true }
         ];
 
         // Centros de Custo Padrão
         const defaultCostCenters = [
-          { company_id: normalizedCompanyId, name: 'Administrativo' },
-          { company_id: normalizedCompanyId, name: 'Comercial' },
-          { company_id: normalizedCompanyId, name: 'Operacional' }
+          { company_id: normalizedCompanyId, name: 'Administrativo', active: true },
+          { company_id: normalizedCompanyId, name: 'Comercial', active: true },
+          { company_id: normalizedCompanyId, name: 'Operacional', active: true }
         ];
 
         await Promise.all([
@@ -933,7 +1058,13 @@ export async function gerarDRE(companyId: string, mes: number, ano: number, bank
   const endDate = new Date(ano, mes, 0, 23, 59, 59);
 
   const [transacoes, planoContas] = await Promise.all([
-    financeService.buscarTransacoes(normalizedCompanyId, { startDate, endDate, bankAccountId, costCenterId }),
+    financeService.buscarTransacoes(normalizedCompanyId, { 
+      startDate, 
+      endDate, 
+      bankAccountId, 
+      costCenterId,
+      status: 'PAID' // EBITDA e DRE gerencial consideram apenas o que foi efetivado (Regime de Caixa para o usuário)
+    }),
     financeService.buscarPlanoDeContas(normalizedCompanyId)
   ]);
 

@@ -17,7 +17,6 @@ import {
   RefreshCw,
   PieChart,
   BarChart3,
-  TrendingUp,
   CalendarClock,
   CheckCircle2,
   Library,
@@ -54,7 +53,6 @@ const menuGroups = [
     title: 'Movimentações e Caixa',
     items: [
       { icon: ArrowLeftRight, label: 'Lançamentos', path: '/transacoes' },
-      { icon: TrendingUp, label: 'Visualização Rápida', path: '/fluxo-caixa' },
       { icon: CalendarClock, label: 'A Pagar / Receber', path: '/transacoes?status=PENDING' },
       { icon: CheckCircle2, label: 'Pagas / Recebidas', path: '/transacoes?status=PAID' },
       { icon: Library, label: 'Extrato de Contas', path: '/extrato' },

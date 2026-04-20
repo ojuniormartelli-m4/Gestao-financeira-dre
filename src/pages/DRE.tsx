@@ -13,7 +13,7 @@ import { LoginPage } from './Login';
 
 export function DREPage() {
   const { selectedBankId, setSelectedBankId } = useFilter();
-  const { companyConfig } = useCompany();
+  const { companyConfig, companyId } = useCompany();
   const [dre, setDre] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -22,7 +22,6 @@ export function DREPage() {
   const [costCenters, setCostCenters] = useState<any[]>([]);
   const [selectedCostCenterId, setSelectedCostCenterId] = useState('all');
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
 
   const exportToPDF = () => {
     if (!dre) return;

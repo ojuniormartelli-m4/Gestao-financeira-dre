@@ -13,7 +13,7 @@ export type DREGroup =
   | 'NON_OPERATING' 
   | 'INVESTMENT';
 
-export type TransactionStatus = 'PENDING' | 'PAID' | 'CANCELLED';
+export type TransactionStatus = 'PENDING' | 'PAID' | 'CANCELLED' | 'SCHEDULED' | 'CONCILIATED';
 
 export type BankAccountType = 'CHECKING' | 'SAVINGS' | 'CASH' | 'CREDIT_CARD';
 

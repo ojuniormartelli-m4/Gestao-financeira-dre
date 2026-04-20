@@ -18,6 +18,8 @@ interface CompanyContextType {
   costCenters: any[];
   contacts: any[];
   creditCards: any[];
+  companyId: string;
+  setCompanyId: (id: string) => void;
   refreshData: () => Promise<void>;
 }
 
@@ -32,8 +34,22 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [costCenters, setCostCenters] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
+  const [companyId, setCompanyIdState] = useState<string>(() => {
+    const saved = localStorage.getItem('companyId');
+    if (saved && saved !== 'null') {
+      console.log(`[CompanyContext] ID detectado no storage: ${saved}`);
+      return saved;
+    }
+    console.log('[CompanyContext] ID ausente no storage, usando padrão m4-digital');
+    return 'm4-digital';
+  });
   const { user } = useAuth();
-  const companyId = 'm4-digital';
+
+  const setCompanyId = (id: string) => {
+    const validId = id && id !== 'null' ? id : 'm4-digital';
+    setCompanyIdState(validId);
+    localStorage.setItem('companyId', validId);
+  };
 
   const refreshConfig = async () => {
     try {
@@ -48,16 +64,45 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   const refreshData = async () => {
     if (!user) return;
+    
+    if (!companyId || companyId === 'null') {
+      console.warn('[CompanyContext] ID inválido detectado em refreshData, restaurando padrão...');
+      setCompanyId('m4-digital');
+      return;
+    }
+
+    console.log(`[CompanyContext] Iniciando carga resiliente para: ${companyId}`);
     setLoading(true);
+
     try {
+      // Carregamos cada um individualmente para que um erro em um não trave os outros
+      const fetchTask = async (task: () => Promise<any>, name: string) => {
+        try {
+          return await task();
+        } catch (e) {
+          console.error(`[CompanyContext] Falha ao carregar ${name}:`, e);
+          return [];
+        }
+      };
+
       const [banks, cats, pms, ccs, cnts, cards] = await Promise.all([
-        financeService.buscarContasBancarias(companyId),
-        financeService.buscarPlanoDeContas(companyId),
-        financeService.buscarFormasPagamento(companyId),
-        financeService.buscarCentrosCusto(companyId),
-        financeService.buscarContatos(companyId),
-        financeService.buscarCartoesCredito(companyId)
+        fetchTask(() => financeService.buscarContasBancarias(companyId), 'bancos'),
+        fetchTask(() => financeService.buscarPlanoDeContas(companyId), 'categorias'),
+        fetchTask(() => financeService.buscarFormasPagamento(companyId), 'pagamentos'),
+        fetchTask(() => financeService.buscarCentrosCusto(companyId), 'centros'),
+        fetchTask(() => financeService.buscarContatos(companyId), 'contatos'),
+        fetchTask(() => financeService.buscarCartoesCredito(companyId), 'cartões')
       ]);
+      
+      console.log(`[CompanyContext] Carga finalizada para ${companyId}:`, {
+        bancos: banks?.length || 0,
+        categorias: cats?.length || 0,
+        pagamentos: pms?.length || 0,
+        centros: ccs?.length || 0,
+        contatos: cnts?.length || 0,
+        cartoes: cards?.length || 0
+      });
+
       setBankAccounts(banks || []);
       setCategories(cats || []);
       setPaymentMethods(pms || []);
@@ -65,21 +110,21 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       setContacts(cnts || []);
       setCreditCards(cards || []);
     } catch (error) {
-      console.error('Erro ao carregar dados da empresa:', error);
+      console.error('Erro crítico no refreshData:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && companyId && companyId !== 'null') {
       const init = async () => {
         await financeService.verificarEPovoarDadosIniciais(companyId);
         await Promise.all([refreshConfig(), refreshData()]);
       };
       init();
     }
-  }, [user]);
+  }, [user, companyId]);
 
   const setCompanyConfig = (config: CompanyConfig) => {
     setCompanyConfigState(config);
@@ -97,6 +142,8 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       costCenters,
       contacts,
       creditCards,
+      companyId,
+      setCompanyId,
       refreshData
     }}>
       {children}

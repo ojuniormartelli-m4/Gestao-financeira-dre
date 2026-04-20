@@ -48,7 +48,7 @@ import { useTheme } from '../contexts/ThemeContext';
 export function DashboardPage() {
   const { theme } = useTheme();
   const { selectedBankId, setSelectedBankId } = useFilter();
-  const { companyConfig } = useCompany();
+  const { companyConfig, companyId } = useCompany();
   const [dre, setDre] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
@@ -60,7 +60,6 @@ export function DashboardPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [message, setMessage] = useState('');
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
   const navigate = useNavigate();
 
   const loadData = async () => {

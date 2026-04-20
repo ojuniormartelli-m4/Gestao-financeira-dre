@@ -21,7 +21,9 @@ import {
   Check,
   AlertCircle,
   Sparkles,
-  Wallet
+  Wallet,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { financeService } from '../financeService';
 import { aiService } from '../aiService';
@@ -30,6 +32,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { Transaction, ChartOfAccount, TransactionStatus } from '../types';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { format, startOfMonth, endOfMonth, parse } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { useFilter } from '../contexts/FilterContext';
 import Papa from 'papaparse';
 import { read, utils } from 'xlsx';
@@ -39,17 +42,24 @@ import { supabase } from '../supabase';
 export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedBankId, setSelectedBankId } = useFilter();
+  const { 
+    companyId, 
+    bankAccounts: accounts, 
+    categories, 
+    paymentMethods, 
+    costCenters, 
+    contacts, 
+    creditCards,
+    refreshData: refreshCompanyData 
+  } = useCompany();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<ChartOfAccount[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [creditCards, setCreditCards] = useState<any[]>([]);
-  const [costCenters, setCostCenters] = useState<any[]>([]);
-  const [contacts, setContacts] = useState<any[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'view' | 'edit'>('view');
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
   
   const initialStatus = (searchParams.get('status') as TransactionStatus | 'ALL') || 'ALL';
   const [filterStatus, setFilterStatus] = useState<TransactionStatus | 'ALL'>(initialStatus);
@@ -82,8 +92,6 @@ export function TransactionsPage() {
     setSearchParams(newParams);
   };
   
-  const companyId = 'm4-digital';
-
   // Debug Logs
   console.log('ID da Empresa atual:', companyId);
   console.log('Contas recebidas no componente:', accounts);
@@ -92,11 +100,35 @@ export function TransactionsPage() {
     console.warn('Nenhuma conta encontrada para este companyId:', companyId);
   }
 
+  const handleEdit = (tx: Transaction, mode: 'view' | 'edit' = 'view') => {
+    setEditingTransaction(tx);
+    setModalMode(mode);
+    setTimeout(() => {
+      setIsModalOpen(true);
+    }, 50);
+    setActiveMenu(null);
+  };
+
+  const handleDelete = async (tx: Transaction) => {
+    if (!confirm('Tem certeza que deseja excluir este lançamento? Esta ação irá estornar o saldo se a transação estiver paga.')) return;
+    try {
+      if (!companyId) return;
+      await financeService.excluirTransacao(companyId as string, tx.id);
+      loadData();
+      refreshCompanyData();
+      setActiveMenu(null);
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao excluir transação.');
+    }
+  };
+
   const handleToggleStatus = async (tx: Transaction) => {
     try {
       const newStatus = tx.status === 'PAID' ? 'PENDING' : 'PAID';
       await financeService.quitarTransacao(companyId, tx.id, newStatus);
       loadData();
+      refreshCompanyData();
     } catch (error) {
       console.error(error);
     }
@@ -151,56 +183,23 @@ export function TransactionsPage() {
       console.log('Filtro ativo:', filterType, { start: start.toISOString(), end: end.toISOString() });
       console.log('Buscando transações entre:', start.toLocaleDateString(), 'e', end.toLocaleDateString());
 
-      const [txs, cats, banks, cards, cCenters, cnts, pMethods] = await Promise.all([
-        financeService.buscarTransacoes(companyId, { 
-          startDate: start, 
-          endDate: end,
-          bankAccountId: selectedBankId,
-          status: filterStatus
-        }),
-        financeService.buscarPlanoDeContas(companyId),
-        financeService.buscarContasBancarias(companyId),
-        financeService.buscarCartoesCredito(companyId),
-        financeService.buscarCentrosCusto(companyId),
-        financeService.buscarContatos(companyId),
-        financeService.buscarFormasPagamento(companyId)
-      ]);
+      const txs = await financeService.buscarTransacoes(companyId, { 
+        startDate: start, 
+        endDate: end,
+        bankAccountId: selectedBankId,
+        status: filterStatus
+      });
       
-      console.log('Resultados da Busca:', txs);
-      let finalBanks = banks || [];
-      
-      // Fallback: If no banks found with companyId, try without filter for debugging/test
-      if (finalBanks.length === 0) {
-        console.log('Tentando carregar bancos sem filtro de company_id para teste');
-        try {
-          const { data: allBanks } = await supabase.from('bank_accounts').select('*');
-          if (allBanks && allBanks.length > 0) {
-            console.log('Bancos encontrados sem filtro (DEBUG):', allBanks);
-            finalBanks = allBanks.map(item => ({
-              id: item.id,
-              name: item.name,
-              bankName: item.bank_name,
-              initialBalance: Number(item.initial_balance || 0),
-              currentBalance: Number(item.current_balance || 0),
-              color: item.color
-            }));
-          }
-        } catch (e) {
-          console.error('Erro no fallback de bancos:', e);
-        }
-      }
-
-      console.log("Contas carregadas no filtro:", finalBanks);
-      console.log('Resultados da Busca:', txs);
+      console.log('Transações carregadas:', txs.length);
       setTransactions(txs || []);
-      setCategories(cats || []);
-      setAccounts(finalBanks);
-      setCreditCards(cards || []);
-      setCostCenters(cCenters || []);
-      setContacts(cnts || []);
-      setPaymentMethods(pMethods || []);
+
+      // Se os dados globais ainda não foram carregados no contexto, solicitar carga
+      if (accounts.length === 0 || categories.length === 0) {
+        console.log('[Transactions] Contexto sem dados (contas/categorias), atualizando...');
+        refreshCompanyData();
+      }
     } catch (error) {
-      console.error(error);
+      console.error('Erro ao carregar transações:', error);
     } finally {
       setLoading(false);
     }
@@ -218,7 +217,7 @@ export function TransactionsPage() {
       }
     };
     initPage();
-  }, [filterType, filterDate, filterYear, customStartDate, customEndDate, user, authLoading, selectedBankId, companyId]);
+  }, [filterType, filterDate, filterYear, customStartDate, customEndDate, user, authLoading, selectedBankId, companyId, filterStatus]);
 
   if (authLoading) {
     return (
@@ -237,274 +236,452 @@ export function TransactionsPage() {
     return matchesSearch;
   });
 
+  // Group transactions by day
+  const groupedTransactions = filteredTransactions.reduce((groups: { [key: string]: Transaction[] }, tx) => {
+    const dateKey = format(tx.dateCompetence, 'yyyy-MM-dd');
+    if (!groups[dateKey]) groups[dateKey] = [];
+    groups[dateKey].push(tx);
+    return groups;
+  }, {});
+
+  const sortedDateKeys = Object.keys(groupedTransactions).sort((a, b) => b.localeCompare(a));
+
+  const sortedFilteredTransactions = [...filteredTransactions].sort((a, b) => {
+    const dateA = new Date(a.dateCompetence).getTime();
+    const dateB = new Date(b.dateCompetence).getTime();
+    if (dateA !== dateB) return dateA - dateB;
+    return a.id.localeCompare(b.id);
+  });
+
+  const transactionsWithBalance = React.useMemo(() => {
+    const balances: { [accountId: string]: number } = {};
+    
+    // Initialize starting balance for each account using the current balance from context
+    // This is a bit approximate if not all transactions are loaded, but provides the "running" feel.
+    accounts.forEach(acc => {
+      // Find historical sum of loaded transactions to calculate the "starting" point for this view
+      const accountTxs = sortedFilteredTransactions.filter(t => t.bankAccountId === acc.id);
+      const periodImpact = accountTxs.reduce((sum, t) => {
+        if (t.status !== 'PAID') return sum;
+        const amount = Number(t.amount || 0);
+        return sum + (t.type === 'REVENUE' ? amount : -amount);
+      }, 0);
+      
+      balances[acc.id] = Number(acc.currentBalance || 0) - periodImpact;
+    });
+
+    return sortedFilteredTransactions.map(tx => {
+      if (tx.status === 'PAID') {
+        const amount = Number(tx.amount || 0);
+        balances[tx.bankAccountId] += (tx.type === 'REVENUE' ? amount : -amount);
+      }
+      return { ...tx, currentBalance: balances[tx.bankAccountId] };
+    }).reverse(); // Most recent first for display
+  }, [sortedFilteredTransactions, accounts]);
+
+  // Sidebar Summary Logic
+  const periodStats = transactions.reduce((acc, tx) => {
+    const isPaid = tx.status === 'PAID';
+    const amount = Number(tx.amount);
+    
+    if (tx.type === 'REVENUE') {
+      acc.entradasProjetadas += amount;
+      if (isPaid) acc.entradasConfirmadas += amount;
+    } else {
+      acc.saidasProjetadas += amount;
+      if (isPaid) acc.saidasConfirmadas += amount;
+    }
+    
+    return acc;
+  }, {
+    entradasConfirmadas: 0,
+    entradasProjetadas: 0,
+    saidasConfirmadas: 0,
+    saidasProjetadas: 0
+  });
+
+  const accountStats = accounts.map(acc => {
+    const periodTxs = transactions.filter(t => t.bankAccountId === acc.id);
+    const confirmed = periodTxs.filter(t => t.status === 'PAID').reduce((sum, t) => sum + (t.type === 'REVENUE' ? t.amount : -t.amount), 0);
+    const projected = periodTxs.reduce((sum, t) => sum + (t.type === 'REVENUE' ? t.amount : -t.amount), 0);
+    return {
+      ...acc,
+      confirmed,
+      projected
+    };
+  });
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Transações</h1>
-          <p className="text-text-secondary text-sm">Gerencie suas receitas e despesas</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button 
-            onClick={() => setIsTransferModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-xl text-sm font-bold hover:border-accent transition-all"
-          >
-            <ArrowLeftRight size={18} className="text-accent" />
-            Transferência
-          </button>
-          <button 
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2 bg-surface hover:bg-white/5 border border-border text-text-secondary hover:text-text-primary px-4 py-2 rounded-xl font-bold transition-all"
-          >
-            <Upload size={20} />
-            <span className="hidden md:inline">Importar Planilha</span>
-          </button>
-          <button 
-            onClick={exportToCSV}
-            disabled={transactions.length === 0}
-            className="flex items-center gap-2 bg-surface hover:bg-white/5 border border-border text-text-secondary hover:text-text-primary px-4 py-2 rounded-xl font-bold transition-all disabled:opacity-50"
-          >
-            <Download size={20} />
-            <span className="hidden md:inline">Exportar CSV</span>
-          </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-accent hover:opacity-90 text-bg px-4 py-2 rounded-xl font-bold transition-all shadow-lg shadow-accent/20"
-          >
-            <Plus size={20} />
-            Nova Transação
-          </button>
-        </div>
-      </header>
-
-      {/* Filters */}
-      <div className="flex flex-col gap-4 bg-surface p-6 rounded-2xl border border-border shadow-sm">
-        <div className="flex flex-wrap items-center gap-4 border-b border-border pb-4">
-          <div className="flex bg-bg p-1 rounded-xl border border-border">
-            {(['TODAY', 'MONTH', 'YEAR', 'CUSTOM'] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={cn(
-                  "px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
-                  filterType === type 
-                    ? "bg-accent text-bg shadow-sm" 
-                    : "text-text-secondary hover:text-text-primary"
-                )}
-              >
-                {type === 'TODAY' ? 'Hoje' : type === 'MONTH' ? 'Mês' : type === 'YEAR' ? 'Ano' : 'Personalizado'}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 flex items-center gap-2">
-            {filterType === 'MONTH' && (
-              <input 
-                type="month" 
-                value={format(filterDate, 'yyyy-MM')}
-                onChange={(e) => setFilterDate(new Date(e.target.value + '-02'))}
-                className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
-              />
-            )}
-            
-            {filterType === 'YEAR' && (
-              <select 
-                value={filterYear}
-                onChange={(e) => setFilterYear(Number(e.target.value))}
-                className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
-              >
-                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            )}
-
-            {filterType === 'CUSTOM' && (
-              <div className="flex items-center gap-2">
-                <input 
-                  type="date" 
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
-                />
-                <span className="text-text-secondary">até</span>
-                <input 
-                  type="date" 
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="bg-bg border border-border rounded-xl py-2 px-4 text-sm focus:outline-none focus:border-accent"
-                />
-              </div>
-            )}
-            
-            {filterType === 'TODAY' && (
-              <div className="text-sm font-bold text-accent px-4 py-2 bg-accent/5 rounded-xl border border-accent/10">
-                {format(new Date(), 'dd/MM/yyyy')}
-              </div>
-            )}
-          </div>
-
-          <div className="relative min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-            <input 
-              type="text" 
-              placeholder="Buscar pela descrição..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors"
-            />
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[200px] relative">
-            <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
-            <select 
-              value={selectedBankId}
-              onChange={(e) => setSelectedBankId(e.target.value)}
-              className="w-full bg-bg border border-border rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+    <div className="flex h-[calc(100vh-120px)] gap-6 overflow-hidden">
+      {/* Sidebar - Summary & Date Filters */}
+      <aside className="w-80 flex flex-col gap-6 overflow-y-auto no-scrollbar">
+        {/* Date Selector Card */}
+        <div className="bg-surface rounded-3xl border border-border shadow-sm overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-border flex items-center justify-between bg-bg/30">
+            <button 
+              onClick={() => {
+                const d = new Date(filterDate);
+                d.setMonth(d.getMonth() - 1);
+                setFilterDate(d);
+                setFilterType('MONTH');
+              }}
+              className="p-1.5 hover:bg-bg rounded-lg text-text-secondary"
             >
-              <option value="all">Todas as Contas</option>
-              {accounts.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-2">
-            {(['ALL', 'PAID', 'PENDING'] as const).map((status) => (
-              <button
-                key={status}
-                onClick={() => updateStatusFilter(status)}
-                className={cn(
-                  "py-2 px-6 rounded-xl text-[10px] font-bold border transition-all uppercase tracking-wider",
-                  filterStatus === status 
-                    ? "bg-accent/10 border-accent/20 text-accent shadow-sm" 
-                    : "bg-bg border-border text-text-secondary hover:border-text-secondary/50"
-                )}
-              >
-                {status === 'ALL' ? 'Todos' : status === 'PAID' ? 'Pago' : 'Pendente'}
+              <ChevronRight className="rotate-180" size={18} />
+            </button>
+            <div className="text-xs font-bold uppercase tracking-widest text-text-primary">
+              {format(filterDate, 'MMM yyyy')}
+            </div>
+            <button 
+              onClick={() => {
+                const d = new Date(filterDate);
+                d.setMonth(d.getMonth() + 1);
+                setFilterDate(d);
+                setFilterType('MONTH');
+              }}
+              className="p-1.5 hover:bg-bg rounded-lg text-text-secondary"
+            >
+              <ChevronRight size={18} />
+            </button>
+            <div className="flex items-center gap-1 border-l border-border pl-2 ml-2">
+              <Calendar size={14} className="text-text-secondary" />
+              <button className="p-1.5 hover:bg-bg rounded-lg text-text-secondary">
+                <Filter size={14} />
               </button>
-            ))}
+            </div>
+          </div>
+
+          <div className="p-4 space-y-6">
+            {/* Accounts Mini List */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center px-1">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" className="rounded border-border text-accent" checked readOnly />
+                </div>
+                <div className="flex gap-4">
+                  <span className="text-[9px] font-bold uppercase text-text-secondary tracking-tighter">Saldo Atual</span>
+                  <span className="text-[9px] font-bold uppercase text-text-secondary tracking-tighter">Proj. Período</span>
+                </div>
+              </div>
+              
+              <div className="space-y-1">
+                {accountStats.map(acc => (
+                  <div key={acc.id} className="flex justify-between items-center py-1 hover:bg-bg/50 rounded-lg px-1 transition-colors">
+                    <div className="flex items-center gap-2 max-w-[100px]">
+                      <input type="checkbox" className="rounded border-border text-accent" checked={selectedBankId === 'all' || selectedBankId === acc.id} onChange={() => setSelectedBankId(acc.id === selectedBankId ? 'all' : acc.id)} />
+                      <span className="text-[11px] font-medium truncate text-text-primary">{acc.name}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <span className={cn("text-[10px] font-mono", acc.currentBalance >= 0 ? "text-text-primary/70" : "text-danger")}>
+                        {acc.currentBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className={cn("text-[10px] font-mono", acc.projected >= 0 ? "text-success" : "text-danger")}>
+                        {acc.projected.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between pt-2 border-t border-border mt-1">
+                  <span className="text-[10px] font-bold uppercase text-text-primary">Total</span>
+                  <div className="flex gap-2">
+                    <span className="text-[10px] font-mono font-bold text-text-primary/70">
+                      {accountStats.reduce((sum, a) => sum + (a.currentBalance || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-success">
+                      {accountStats.reduce((sum, a) => sum + a.projected, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Results Summary */}
+            <div className="pt-4 border-t border-border space-y-4">
+              <h4 className="text-[9px] font-bold text-text-secondary uppercase tracking-widest text-center">Resultados (R$)</h4>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-text-secondary">Entradas</span>
+                  <span className="text-success font-bold">{periodStats.entradasConfirmadas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="pl-3 space-y-1">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-text-secondary">Receitas</span>
+                    <span className="text-success">{periodStats.entradasConfirmadas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-text-secondary">Transferências</span>
+                    <span className="text-success">0,00</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between text-[11px] pt-1">
+                  <span className="text-text-secondary">Saídas</span>
+                  <span className="text-danger font-bold">-{periodStats.saidasConfirmadas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="pl-3 space-y-1">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-text-secondary">Despesas</span>
+                    <span className="text-danger">-{periodStats.saidasConfirmadas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-text-secondary">Transferências</span>
+                    <span className="text-danger">0,00</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between text-[11px] font-bold border-t border-border pt-2">
+                  <span className="text-text-primary uppercase tracking-tighter">Resultado</span>
+                  <span className={cn(periodStats.entradasConfirmadas - periodStats.saidasConfirmadas >= 0 ? "text-success" : "text-danger")}>
+                    {(periodStats.entradasConfirmadas - periodStats.saidasConfirmadas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-bg/50 border-b border-border">
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary">Data</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary">Descrição</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary">Categoria</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary">Status</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary text-right">Valor</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-text-secondary">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                      Carregando transações...
-                    </div>
-                  </td>
-                </tr>
-              ) : transactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-text-secondary italic">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="p-4 bg-bg rounded-full text-accent/50">
-                        <ArrowLeftRight size={32} />
-                      </div>
-                      <p>Nenhuma transação registrada nesta empresa.</p>
-                      <button 
-                        onClick={() => setIsModalOpen(true)}
-                        className="text-xs font-bold text-accent hover:underline"
-                      >
-                        Começar agora
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-text-secondary italic">
-                    Nenhum lançamento corresponde à sua busca ou filtro.
-                  </td>
-                </tr>
-              ) : (
-                filteredTransactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-white/5 transition-colors group">
-                    <td className="px-6 py-4 text-sm whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{formatDate(tx.dateCompetence)}</span>
-                        <span className="text-[10px] text-text-secondary uppercase">Competência</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="font-medium text-text-primary">{tx.description}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded-md bg-bg border border-border text-[11px] font-bold text-text-secondary">
-                        {categories.find(c => c.id === tx.categoryId)?.name || 'Sem Categoria'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm whitespace-nowrap">
-                      <div className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase w-fit",
-                        tx.status === 'PAID' 
-                          ? "bg-success/10 text-success border border-success/20" 
-                          : "bg-amber-400/10 text-amber-400 border border-amber-400/20"
-                      )}>
-                        {tx.status === 'PAID' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                        {tx.status === 'PAID' ? 'Pago' : 'Pendente'}
-                      </div>
-                    </td>
-                    <td className={cn(
-                      "px-6 py-4 text-sm font-bold text-right whitespace-nowrap",
-                      tx.type === 'REVENUE' ? "text-success" : "text-danger"
-                    )}>
-                      {tx.type === 'REVENUE' ? '+' : '-'} {formatCurrency(tx.amount)}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => handleToggleStatus(tx)}
-                          className={cn(
-                            "p-2 rounded-lg transition-all",
-                            tx.status === 'PAID' 
-                              ? "text-success bg-success/10" 
-                              : "text-text-secondary hover:text-text-primary hover:bg-bg"
-                          )}
-                          title={tx.status === 'PAID' ? "Marcar como Pendente" : "Marcar como Pago"}
-                        >
-                          <CheckCircle2 size={18} />
-                        </button>
-                        <button className="p-2 hover:bg-bg rounded-lg text-text-secondary transition-colors">
-                          <MoreHorizontal size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        {/* AI Insight Placeholder */}
+        <div className="bg-accent/5 rounded-3xl border border-accent/10 p-5 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="text-accent" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-accent">Insights da IA</span>
+          </div>
+          <p className="text-[11px] text-text-secondary leading-relaxed italic">
+            "Sua despesa com transportes subiu 15% este mês. Considere renegociar contratos ou otimizar rotas."
+          </p>
         </div>
-      </div>
+      </aside>
 
+      {/* Main Content Areas */}
+      <main className="flex-1 flex flex-col gap-6 min-w-0 h-full overflow-hidden">
+        {/* Top bar with filters and actions */}
+        <div className="bg-surface rounded-2xl border border-border px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
+          <div className="flex items-center gap-6">
+            <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">Filtrar</span>
+            <div className="flex gap-3">
+              {[
+                { id: 'PENDING', label: 'Pendentes', color: 'bg-amber-400' },
+                { id: 'SCHEDULED', label: 'Agendados', color: 'bg-blue-400' },
+                { id: 'PAID', label: 'Confirmados', color: 'bg-success' },
+                { id: 'CONCILIATED', label: 'Conciliados', color: 'bg-accent' }
+              ].map(f => (
+                <button 
+                  key={f.id}
+                  onClick={() => updateStatusFilter(f.id === filterStatus ? 'ALL' : f.id as any)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase hover:bg-bg transition-colors border border-transparent",
+                    filterStatus === f.id && "bg-bg border-border"
+                  )}
+                >
+                  <div className={cn("w-2 h-2 rounded-full", f.color)} />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Action Buttons */}
+            <div className="flex items-center gap-1 bg-bg p-1 rounded-xl border border-border">
+              <button onClick={() => {
+                setEditingTransaction(null);
+                setModalMode('edit');
+                setTimeout(() => setIsModalOpen(true), 50);
+              }} className="p-2 hover:bg-white/5 rounded-lg text-text-secondary" title="Nova Transação">
+                <Plus size={18} />
+              </button>
+              <button 
+                onClick={exportToCSV}
+                className="p-2 hover:bg-white/5 rounded-lg text-text-secondary" title="Exportar CSV"
+              >
+                <Download size={18} />
+              </button>
+              <button className="p-2 hover:bg-white/5 rounded-lg text-text-secondary">
+                <RefreshCw size={18} />
+              </button>
+            </div>
+            
+            <div className="relative ml-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={16} />
+              <input 
+                type="text" 
+                placeholder="Pesquisar..." 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-9 pr-4 py-2 bg-bg border border-border rounded-xl text-xs font-medium focus:outline-none focus:border-accent w-48"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Transaction Grouped List */}
+        <div className="bg-surface rounded-2xl border border-border shadow-xl flex-1 overflow-y-auto no-scrollbar relative min-h-0">
+          {loading ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface/50 backdrop-blur-sm z-20">
+              <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin mb-4" />
+              <p className="text-sm font-bold text-text-secondary uppercase tracking-widest">Carregando lançamentos...</p>
+            </div>
+          ) : transactionsWithBalance.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full py-20 text-center space-y-4">
+              <div className="w-16 h-16 bg-bg rounded-full flex items-center justify-center text-text-secondary opacity-50">
+                <FileSpreadsheet size={32} />
+              </div>
+              <p className="text-text-secondary italic">Nenhum lançamento encontrado para este período.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/20">
+              {transactionsWithBalance.map((tx) => (
+                <div 
+                  key={tx.id} 
+                  className={cn(
+                    "grid grid-cols-[30px,1fr] items-start px-4 py-3 hover:bg-white/5 transition-all group cursor-pointer border-l-4",
+                    activeMenu === tx.id && "bg-white/5",
+                    tx.status === 'PAID' ? "border-l-success" : "border-l-amber-400"
+                  )}
+                  onClick={() => handleEdit(tx, 'view')}
+                >
+                  {/* Status Indicator */}
+                  <div className="flex justify-center pt-1">
+                    <div className={cn("w-2 h-2 rounded-full", tx.status === 'PAID' ? "bg-success" : "border border-amber-400")} />
+                  </div>
+
+                  {/* Content Area (2 Lines) */}
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    {/* Line 1: Date + Title ... Amount + Menu */}
+                    <div className="flex justify-between items-center gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-[11px] text-text-secondary font-mono bg-bg px-1.5 py-0.5 rounded border border-border whitespace-nowrap">
+                          {format(new Date(tx.dateCompetence), 'dd/MM/yy')}
+                        </span>
+                        <span className="text-[14px] font-bold text-text-primary truncate transition-colors group-hover:text-accent">
+                          {tx.description}
+                        </span>
+                        {tx.isRecurring && <RefreshCw size={12} className="text-text-secondary opacity-30 shrink-0" />}
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className={cn("text-[14px] font-mono font-bold", tx.type === 'REVENUE' ? "text-success" : "text-danger")}>
+                          {tx.type === 'REVENUE' ? '' : '-'} {tx.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </div>
+                        
+                        {/* Action Menu (3 dots) */}
+                        <div className="relative">
+                           <button 
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              setActiveMenu(activeMenu === tx.id ? null : tx.id); 
+                            }}
+                            className="p-1 hover:bg-white/10 rounded text-text-secondary transition-colors"
+                           >
+                            <MoreHorizontal size={14} />
+                           </button>
+
+                           {activeMenu === tx.id && (
+                             <div className="absolute right-0 top-full mt-1 w-48 bg-surface border border-border rounded-xl shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in duration-150">
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); handleEdit(tx, 'edit'); }}
+                                 className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/5 transition-colors text-left"
+                               >
+                                 <Edit2 size={16} className="text-accent" />
+                                 <span className="font-medium text-text-primary">Editar Lançamento</span>
+                               </button>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); handleToggleStatus(tx); }}
+                                 className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/5 transition-colors text-left border-t border-border/50"
+                               >
+                                 <CheckCircle2 size={16} className={tx.status === 'PAID' ? "text-success" : "text-text-secondary"} />
+                                 <span className="font-medium text-text-primary">
+                                   {tx.status === 'PAID' ? 'Marcar como Pendente' : (tx.type === 'REVENUE' ? 'Confirmar Recebimento' : 'Confirmar Pagamento')}
+                                 </span>
+                               </button>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); handleDelete(tx); }}
+                                 className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-danger/10 text-danger transition-colors text-left border-t border-border/50"
+                               >
+                                 <Trash2 size={16} />
+                                 <span className="font-bold">Excluir</span>
+                               </button>
+                             </div>
+                           )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Line 2: Labels ... Balance + Confirm */}
+                    <div className="flex justify-between items-center gap-4">
+                      {/* Detailed Labels */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-1.5 py-0.5 rounded bg-bg border border-border text-[9px] font-black text-text-secondary uppercase tracking-tight">
+                          {accounts.find(a => a.id === tx.bankAccountId)?.name || 'Outros'}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-bg border border-border text-[9px] font-bold text-text-secondary uppercase">
+                          {categories.find(c => c.id === tx.categoryId)?.name || 'Geral'}
+                        </span>
+                        {tx.costCenterId && costCenters.find(c => c.id === tx.costCenterId) && (
+                          <span className="px-1.5 py-0.5 rounded bg-bg border border-border text-[9px] font-medium text-text-secondary italic">
+                            {costCenters.find(c => c.id === tx.costCenterId)?.name}
+                          </span>
+                        )}
+                        {tx.status === 'PAID' && <Check size={12} className="text-success/50 ml-1" />}
+                      </div>
+
+                      {/* Balance & Confirm Button */}
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-[12px] text-success/70 leading-none font-mono font-bold">
+                           {tx.currentBalance?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(tx);
+                          }}
+                          className={cn(
+                            "p-1 rounded-md transition-all",
+                            tx.status === 'PAID' 
+                              ? "bg-success/20 text-success" 
+                              : "bg-surface border border-border text-text-secondary hover:border-accent hover:text-accent"
+                          )}
+                          title={tx.status === 'PAID' ? "Desmarcar como pago" : "Confirmar pagamento"}
+                        >
+                          <Check size={14} className={cn(tx.status === 'PAID' ? "opacity-100" : "opacity-30")} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* FAB for Mobile or Quick Add */}
+      <button 
+        onClick={() => setIsModalOpen(true)}
+        className="fixed bottom-8 right-8 w-14 h-14 bg-success text-bg rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+      >
+        <Plus size={28} />
+      </button>
+
+      {/* Overlay to close menu when clicking outside */}
+      {activeMenu && (
+        <div className="fixed inset-0 z-[90]" onClick={() => setActiveMenu(null)} />
+      )}
       {/* Modals */}
       {isModalOpen && (
         <TransactionModal 
-          onClose={() => setIsModalOpen(false)} 
+          transaction={editingTransaction}
+          initialMode={modalMode}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingTransaction(null);
+          }} 
           onSuccess={() => {
             setIsModalOpen(false);
+            setEditingTransaction(null);
             loadData();
+            refreshCompanyData();
           }}
           companyId={companyId}
         />
@@ -516,6 +693,7 @@ export function TransactionsPage() {
           onSuccess={() => {
             setIsTransferModalOpen(false);
             loadData();
+            refreshCompanyData();
           }}
           bankAccounts={accounts}
           companyId={companyId}
@@ -531,6 +709,7 @@ export function TransactionsPage() {
           onSuccess={() => {
             setIsImportModalOpen(false);
             loadData();
+            refreshCompanyData();
           }}
         />
       )}
@@ -943,7 +1122,7 @@ function MappingField({ label, value, onChange, options, optional }: any) {
   );
 }
 
-function TransactionModal({ onClose, onSuccess, companyId }: any) {
+function TransactionModal({ onClose, onSuccess, companyId, transaction, initialMode = 'view' }: any) {
   const { user } = useAuth();
   const { 
     categories, 
@@ -956,48 +1135,91 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
   } = useCompany();
   
   const [formData, setFormData] = React.useState({
-    description: '',
-    amount: '',
-    category_id: '',
-    cost_center_id: '',
-    contact_id: '',
-    payment_method_id: '',
-    credit_card_id: '',
-    type: 'EXPENSE' as 'REVENUE' | 'EXPENSE',
-    dateCompetence: format(new Date(), 'yyyy-MM-dd'),
-    datePayment: '',
-    status: 'PENDING' as TransactionStatus,
-    bank_account_id: bankAccounts[0]?.id || ''
+    description: transaction?.description || '',
+    amount: transaction?.amount || '',
+    category_id: transaction?.categoryId || '',
+    cost_center_id: transaction?.costCenterId || '',
+    contact_id: transaction?.contactId || '',
+    payment_method_id: transaction?.paymentMethodId || '',
+    credit_card_id: transaction?.creditCardId || '',
+    type: (transaction?.type || 'EXPENSE') as 'REVENUE' | 'EXPENSE',
+    dateCompetence: transaction?.dateCompetence ? format(transaction.dateCompetence, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+    datePayment: transaction?.datePayment ? format(transaction.datePayment, 'yyyy-MM-dd') : '',
+    status: (transaction?.status || 'PENDING') as TransactionStatus,
+    bank_account_id: transaction?.bankAccountId || bankAccounts[0]?.id || ''
   });
   const [loading, setLoading] = React.useState(false);
+  const [isEditMode, setIsEditMode] = React.useState(transaction ? (initialMode === 'edit') : true);
+  const [isSubmittingLocked, setIsSubmittingLocked] = React.useState(false);
 
   React.useEffect(() => {
-    console.log('Dados do Contexto no Modal:', { categories, bankAccounts, paymentMethods, costCenters, contacts, creditCards });
+    if (isEditMode) {
+      setIsSubmittingLocked(true);
+      const timer = setTimeout(() => setIsSubmittingLocked(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [isEditMode]);
+
+  React.useEffect(() => {
+    console.log('TransactionModal mounted with context data:', { 
+      categories_count: categories.length, 
+      bankAccounts_count: bankAccounts.length, 
+      paymentMethods_count: paymentMethods.length,
+      costCenters_count: costCenters.length,
+      companyId 
+    });
+    
     if (categories.length === 0 || bankAccounts.length === 0) {
-      console.log('Modal: Contexto parece vazio, garantindo sincronização...');
+      console.log('Modal: Contexto parece vazio, solicitando refreshData...');
       refreshData();
     }
-  }, [categories, bankAccounts]);
+  }, []); // Só no mount para não entrar em loop se o banco retornar vazio
 
+  // Sincronizar banco inicial quando a lista carregar
   React.useEffect(() => {
     if (bankAccounts.length > 0 && !formData.bank_account_id) {
+      console.log('Modal: Auto-selecionando primeira conta bancária:', bankAccounts[0].name);
       setFormData(prev => ({ ...prev, bank_account_id: bankAccounts[0].id }));
     }
-  }, [bankAccounts]);
+  }, [bankAccounts, formData.bank_account_id]);
+
+  // Sincronizar categoria inicial quando a lista carregar ou o tipo mudar
+  React.useEffect(() => {
+    const filteredCats = categories.filter((c: any) => c.type === formData.type);
+    if (filteredCats.length > 0 && (!formData.category_id || !filteredCats.find(c => c.id === formData.category_id))) {
+      console.log(`Modal: Auto-selecionando categoria para ${formData.type}:`, filteredCats[0].name);
+      setFormData(prev => ({ ...prev, category_id: filteredCats[0].id }));
+    } else if (filteredCats.length === 0) {
+      setFormData(prev => ({ ...prev, category_id: '' }));
+    }
+  }, [categories, formData.type]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await financeService.adicionarTransacao(companyId, {
+      if (!formData.dateCompetence) {
+        throw new Error('A data de competência é obrigatória.');
+      }
+
+      // Verificação básica da data para evitar RangeError: Invalid time value
+      const parseDate = (dateStr: string) => {
+        const d = new Date(dateStr + 'T12:00:00');
+        if (isNaN(d.getTime())) return new Date();
+        return d;
+      };
+
+      console.log('Enviando transação:', { ...formData, companyId });
+
+      const transactionData = {
         description: formData.description,
         amount: Number(formData.amount),
         categoryId: formData.category_id,
         bankAccountId: formData.bank_account_id,
         type: formData.type,
         status: formData.status,
-        dateCompetence: new Date(formData.dateCompetence + 'T12:00:00'),
-        datePayment: formData.datePayment ? new Date(formData.datePayment + 'T12:00:00') : undefined,
+        dateCompetence: parseDate(formData.dateCompetence),
+        datePayment: formData.datePayment ? parseDate(formData.datePayment) : undefined,
         costCenterId: formData.cost_center_id || undefined,
         contactId: formData.contact_id || undefined,
         paymentMethodId: formData.payment_method_id || undefined,
@@ -1005,10 +1227,19 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
         companyId,
         isRecurring: false,
         userId: user?.id
-      });
+      };
+
+      if (transaction?.id) {
+        await financeService.editarTransacao(companyId, transaction.id, transactionData);
+      } else {
+        await financeService.adicionarTransacao(companyId, transactionData);
+      }
+
+      console.log('Transação salva com sucesso!');
       onSuccess();
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('Erro ao salvar transação:', error);
+      alert('Erro ao salvar transação: ' + (error.message || 'Verifique os dados e tente novamente.'));
     } finally {
       setLoading(false);
     }
@@ -1023,7 +1254,9 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
         className="relative w-full max-w-lg bg-surface border border-border rounded-3xl shadow-2xl overflow-hidden"
       >
         <div className="p-6 border-b border-border flex justify-between items-center bg-bg/50">
-          <h2 className="text-xl font-bold">Nova Transação</h2>
+          <h2 className="text-xl font-bold">
+            {transaction ? (isEditMode ? 'Editar Lançamento' : 'Detalhes do Lançamento') : 'Nova Transação'}
+          </h2>
           <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl text-text-secondary transition-colors">
             <X size={20} />
           </button>
@@ -1033,24 +1266,28 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
           <div className="grid grid-cols-2 gap-4">
             <button
               type="button"
+              disabled={!isEditMode}
               onClick={() => setFormData({ ...formData, type: 'REVENUE' })}
               className={cn(
                 "py-3 rounded-2xl font-bold text-sm border transition-all",
                 formData.type === 'REVENUE' 
                   ? "bg-success/10 border-success/30 text-success" 
-                  : "bg-bg border-border text-text-secondary"
+                  : "bg-bg border-border text-text-secondary",
+                !isEditMode && "opacity-80"
               )}
             >
               Receita
             </button>
             <button
               type="button"
+              disabled={!isEditMode}
               onClick={() => setFormData({ ...formData, type: 'EXPENSE' })}
               className={cn(
                 "py-3 rounded-2xl font-bold text-sm border transition-all",
                 formData.type === 'EXPENSE' 
                   ? "bg-danger/10 border-danger/30 text-danger" 
-                  : "bg-bg border-border text-text-secondary"
+                  : "bg-bg border-border text-text-secondary",
+                !isEditMode && "opacity-80"
               )}
             >
               Despesa
@@ -1061,11 +1298,12 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
             <label className="text-xs font-bold text-text-secondary uppercase ml-1">Descrição</label>
             <input 
               required
+              disabled={!isEditMode}
               type="text" 
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Ex: Aluguel, Venda Cliente X..."
-              className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
+              className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-70"
             />
           </div>
 
@@ -1074,23 +1312,25 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Valor</label>
               <input 
                 required
+                disabled={!isEditMode}
                 type="number" 
                 step="0.01"
                 value={formData.amount}
                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                 placeholder="0,00"
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-70"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Categoria</label>
               <select 
                 required
+                disabled={!isEditMode}
                 value={formData.category_id}
                 onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
-                <option value="">Selecionar...</option>
+                <option value="">Selecione...</option>
                 {categories.filter((c: any) => c.type === formData.type).map((cat: any) => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
@@ -1103,21 +1343,23 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Data Competência</label>
               <input 
                 required
+                disabled={!isEditMode}
                 type="date" 
                 value={formData.dateCompetence}
                 onChange={(e) => setFormData({ ...formData, dateCompetence: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-70"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Status</label>
               <select 
+                disabled={!isEditMode}
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
                 <option value="PENDING">Pendente</option>
-                <option value="PAID">Pago</option>
+                <option value="PAID">{formData.type === 'REVENUE' ? 'Recebido' : 'Pago'}</option>
               </select>
             </div>
           </div>
@@ -1127,9 +1369,10 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Conta Bancária</label>
               <select 
                 required
+                disabled={!isEditMode}
                 value={formData.bank_account_id}
                 onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
                 <option value="">Selecione...</option>
                 {bankAccounts.map((b: any) => (
@@ -1140,9 +1383,10 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Forma de Pagamento</label>
               <select 
+                disabled={!isEditMode}
                 value={formData.payment_method_id}
                 onChange={(e) => setFormData({ ...formData, payment_method_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
                 <option value="">Opcional...</option>
                 {paymentMethods.map((p: any) => (
@@ -1156,6 +1400,7 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão?</label>
               <select 
+                disabled={!isEditMode}
                 value={formData.credit_card_id}
                 onChange={(e) => {
                   const cardId = e.target.value;
@@ -1166,7 +1411,7 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
                     bank_account_id: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
                   });
                 }}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
                 <option value="">Não (Usar Conta Corrente)</option>
                 {creditCards.map((c: any) => (
@@ -1177,9 +1422,10 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
               <select 
+                disabled={!isEditMode}
                 value={formData.cost_center_id}
                 onChange={(e) => setFormData({ ...formData, cost_center_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
                 <option value="">Opcional...</option>
                 {costCenters.map((c: any) => (
@@ -1190,9 +1436,10 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Contato (Cliente/Fornecedor)</label>
               <select 
+                disabled={!isEditMode}
                 value={formData.contact_id}
                 onChange={(e) => setFormData({ ...formData, contact_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
                 <option value="">Opcional...</option>
                 {contacts.filter((c: any) => formData.type === 'REVENUE' ? c.type === 'CLIENT' : c.type === 'SUPPLIER').map((c: any) => (
@@ -1207,21 +1454,58 @@ function TransactionModal({ onClose, onSuccess, companyId }: any) {
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Data Pagamento</label>
               <input 
                 required
+                disabled={!isEditMode}
                 type="date" 
                 value={formData.datePayment}
                 onChange={(e) => setFormData({ ...formData, datePayment: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
+                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-70"
               />
             </div>
           )}
 
-          <div className="pt-4">
-            <button 
-              disabled={loading}
-              className="w-full bg-accent hover:opacity-90 text-bg py-4 rounded-2xl font-bold transition-all shadow-xl shadow-accent/20 disabled:opacity-50"
-            >
-              {loading ? 'Salvando...' : 'Confirmar Lançamento'}
-            </button>
+          <div className="pt-4 flex gap-3">
+            {!isEditMode ? (
+              <>
+                <button 
+                  key="view-close-btn"
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 px-6 py-4 border border-border rounded-2xl font-bold text-text-secondary hover:bg-white/5 transition-all"
+                >
+                  Fechar
+                </button>
+                <button 
+                  key="view-edit-btn"
+                  type="button"
+                  onClick={() => setIsEditMode(true)}
+                  className="flex-1 bg-accent text-bg px-6 py-4 rounded-2xl font-bold hover:opacity-90 transition-all shadow-xl shadow-accent/20"
+                >
+                  Editar
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  key="edit-cancel-btn"
+                  type="button"
+                  onClick={() => {
+                    if (transaction) setIsEditMode(false);
+                    else onClose();
+                  }}
+                  className="flex-1 px-6 py-4 border border-border rounded-2xl font-bold text-text-secondary hover:bg-white/5 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  key="edit-save-btn"
+                  type="submit"
+                  disabled={loading || isSubmittingLocked}
+                  className="flex-1 bg-accent hover:opacity-90 text-bg py-4 rounded-2xl font-bold transition-all shadow-xl shadow-accent/20 disabled:opacity-50"
+                >
+                  {loading ? 'Salvando...' : 'Salvar'}
+                </button>
+              </>
+            )}
           </div>
         </form>
       </motion.div>

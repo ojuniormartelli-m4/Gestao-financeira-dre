@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { financeService } from '../financeService';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import { motion } from 'motion/react';
 import { 
   Shield, 
@@ -20,48 +21,46 @@ import { LoginPage } from './Login';
 
 export function BalanceSheetPage() {
   const [loading, setLoading] = useState(true);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [creditCards, setCreditCards] = useState<any[]>([]);
+  const [localCreditCards, setLocalCreditCards] = useState<any[]>([]);
   const [pendingTransactions, setPendingTransactions] = useState<any[]>([]);
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
+  const { companyId, bankAccounts, creditCards: contextCreditCards, loading: companyLoading } = useCompany();
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !companyId) return;
     setLoading(true);
     try {
-      const [banks, cards, txs] = await Promise.all([
-        financeService.buscarContasBancarias(companyId),
-        financeService.buscarCartoesCredito(companyId),
-        financeService.buscarTransacoes(companyId) // Fetch all to calculate totals
-      ]);
-      setBankAccounts(banks || []);
-      setCreditCards(cards || []);
-      setPendingTransactions(txs.filter(t => t.status === 'PENDING') || []);
+      console.log(`[BalanceSheet] Carregando transações pendentes para empresa: ${companyId}`);
+      const txs = await financeService.buscarTransacoes(companyId);
       
-      // Calculate current statement for each card
-      const cardsWithBalance = cards.map(card => {
-        const cardTxs = txs.filter(t => t.creditCardId === card.id);
-        const currentStatement = cardTxs.reduce((sum, t) => sum + t.amount, 0);
+      console.log(`[BalanceSheet] Transações carregadas:`, txs?.length);
+      
+      // Calculate current statement for each card based on transactions
+      const cardsWithBalance = (contextCreditCards || []).map(card => {
+        const cardTxs = (txs || []).filter(t => t.creditCardId === card.id);
+        const currentStatement = cardTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
         return { ...card, current_statement: currentStatement };
       });
-      setCreditCards(cardsWithBalance);
+      
+      setLocalCreditCards(cardsWithBalance);
+      // Incluir PENDING e SCHEDULED como obrigações/direitos pendentes
+      setPendingTransactions((txs || []).filter(t => t.status === 'PENDING' || t.status === 'SCHEDULED' || (t.status as any) === 'AGENDADO'));
     } catch (error) {
-      console.error(error);
+      console.error('[BalanceSheet] Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && !companyLoading && user && companyId) {
       loadData();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, companyLoading, companyId, contextCreditCards]);
 
   const stats = useMemo(() => {
     const totalAssets = bankAccounts.reduce((acc, bank) => acc + (Number(bank.currentBalance) || 0), 0);
-    const totalCreditDebt = creditCards.reduce((acc, card) => acc + (card.current_statement || 0), 0);
+    const totalCreditDebt = localCreditCards.reduce((acc, card) => acc + (card.current_statement || 0), 0);
     
     const pendingRevenue = pendingTransactions
       .filter(tx => tx.type === 'REVENUE')
@@ -84,9 +83,9 @@ export function BalanceSheetPage() {
       netWorth,
       projectedBalance
     };
-  }, [bankAccounts, creditCards, pendingTransactions]);
+  }, [bankAccounts, localCreditCards, pendingTransactions]);
 
-  if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
+  if (authLoading || companyLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
   if (!user) return <LoginPage />;
 
   return (
@@ -170,10 +169,10 @@ export function BalanceSheetPage() {
             <div>
               <div className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mb-3">Faturas de Cartão</div>
               <div className="space-y-3">
-                {creditCards.length === 0 ? (
+                {localCreditCards.length === 0 ? (
                   <p className="text-[11px] text-text-secondary">Nenhum cartão cadastrado.</p>
                 ) : (
-                  creditCards.map(card => (
+                  localCreditCards.map(card => (
                     <div key={card.id} className="flex justify-between items-center p-3 bg-bg/30 rounded-xl border border-border">
                       <div className="flex items-center gap-3">
                         <CreditCard size={14} className="text-danger/70" />

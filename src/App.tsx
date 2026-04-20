@@ -101,7 +101,6 @@ export default function App() {
                   <Route path="transacoes" element={<TransactionsPage />} />
                   <Route path="dre" element={<DREPage />} />
                   <Route path="dfc" element={<CashFlowPage />} />
-                  <Route path="fluxo-caixa" element={<CashFlowPage />} />
                   <Route path="centros-custo" element={<CostCentersPage />} />
                   <Route path="contatos" element={<ContactsPage />} />
                   <Route path="formas-pagamento" element={<PaymentMethodsPage />} />

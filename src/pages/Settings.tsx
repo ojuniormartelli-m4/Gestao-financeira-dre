@@ -38,6 +38,7 @@ import { useTheme } from '../contexts/ThemeContext';
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
+  const { companyId, setCompanyId } = useCompany();
   
   const getInitialTab = () => {
     switch (tabParam) {
@@ -98,7 +99,11 @@ export function SettingsPage() {
   const { companyConfig: globalCompanyConfig, setCompanyConfig: setGlobalCompanyConfig } = useCompany();
 
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
+  const [editCompanyId, setEditCompanyId] = useState(companyId);
+
+  useEffect(() => {
+    setEditCompanyId(companyId);
+  }, [companyId]);
 
   const handleSeedAuth = async () => {
     setSeedLoading(true);
@@ -621,6 +626,29 @@ export function SettingsPage() {
                   onChange={(v: string) => setCompanyConfig({...companyConfig, name: v})} 
                   placeholder="Ex: Minha Empresa LTDA"
                 />
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase text-text-secondary ml-1">ID da Empresa (Slugs)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={editCompanyId} 
+                      onChange={e => setEditCompanyId(e.target.value)}
+                      placeholder="Identificador único"
+                      className="flex-1 bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:border-accent outline-none"
+                    />
+                    <button 
+                      onClick={() => {
+                        if (confirm('Atenção: Mudar o ID da empresa pode desconectá-la de dados antigos se as políticas RLS não forem atualizadas. Deseja continuar?')) {
+                          setCompanyId(editCompanyId);
+                        }
+                      }}
+                      className="px-4 py-2 bg-surface border border-border rounded-xl text-xs font-bold hover:border-accent text-accent"
+                    >
+                      Alterar ID
+                    </button>
+                  </div>
+                </div>
                 
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-text-secondary ml-1">Logotipo da Empresa</label>
