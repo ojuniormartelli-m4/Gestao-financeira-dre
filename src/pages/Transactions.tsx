@@ -1151,6 +1151,7 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
   const [loading, setLoading] = React.useState(false);
   const [isEditMode, setIsEditMode] = React.useState(transaction ? (initialMode === 'edit') : true);
   const [isSubmittingLocked, setIsSubmittingLocked] = React.useState(false);
+  const [isCreditCard, setIsCreditCard] = React.useState(!!transaction?.creditCardId);
 
   React.useEffect(() => {
     if (isEditMode) {
@@ -1193,6 +1194,43 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
       setFormData(prev => ({ ...prev, category_id: '' }));
     }
   }, [categories, formData.type]);
+
+  // Monitor payment method to toggle credit card mode
+  React.useEffect(() => {
+    const method = paymentMethods.find((p: any) => p.id === formData.payment_method_id);
+    const isCC = method?.name?.toLowerCase().includes('cartão') || !!formData.credit_card_id;
+    setIsCreditCard(isCC);
+    if (!isCC) {
+      setFormData(prev => ({ ...prev, credit_card_id: '' }));
+    }
+  }, [formData.payment_method_id, paymentMethods, formData.credit_card_id]);
+
+  // Logic for due date calculation
+  React.useEffect(() => {
+    if (isCreditCard && formData.credit_card_id && formData.dateCompetence) {
+      const card = creditCards.find((c: any) => c.id === formData.credit_card_id);
+      if (card && card.closingDay && card.dueDay) {
+        // Use a persistent hour to avoid timezone shifts during manual day extraction
+        const competence = new Date(formData.dateCompetence + 'T12:00:00');
+        const compDay = competence.getDate();
+        let dueDate = new Date(competence);
+        
+        // If purchase day is after closing day, it goes to next month
+        if (compDay > card.closingDay) {
+          dueDate.setMonth(dueDate.getMonth() + 1);
+        }
+        
+        dueDate.setDate(card.dueDay);
+        
+        // Update datePayment and set status to PENDING
+        setFormData(prev => ({ 
+          ...prev, 
+          datePayment: format(dueDate, 'yyyy-MM-dd'),
+          status: 'PENDING'
+        }));
+      }
+    }
+  }, [isCreditCard, formData.credit_card_id, formData.dateCompetence, creditCards]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1396,10 +1434,11 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {isCreditCard && (
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão?</label>
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Escolha o Cartão</label>
               <select 
+                required
                 disabled={!isEditMode}
                 value={formData.credit_card_id}
                 onChange={(e) => {
@@ -1408,17 +1447,44 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
                   setFormData({ 
                     ...formData, 
                     credit_card_id: cardId,
-                    bank_account_id: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
+                    bank_account_id: card ? card.bankAccountId : (formData.bank_account_id || bankAccounts[0]?.id || '')
                   });
                 }}
                 className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
               >
-                <option value="">Não (Usar Conta Corrente)</option>
+                <option value="">Selecione o cartão...</option>
                 {creditCards.map((c: any) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            {!isCreditCard && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão?</label>
+                <select 
+                  disabled={!isEditMode}
+                  value={formData.credit_card_id}
+                  onChange={(e) => {
+                    const cardId = e.target.value;
+                    const card = creditCards.find((c: any) => c.id === cardId);
+                    setFormData({ 
+                      ...formData, 
+                      credit_card_id: cardId,
+                      bank_account_id: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
+                    });
+                  }}
+                  className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+                >
+                  <option value="">Não (Usar Conta Corrente)</option>
+                  {creditCards.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
               <select 
@@ -1449,9 +1515,11 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
             </div>
           </div>
 
-          {formData.status === 'PAID' && (
+          {(formData.status === 'PAID' || isCreditCard) && (
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Data Pagamento</label>
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">
+                {isCreditCard ? 'Previsão de Vencimento da Fatura' : 'Data Pagamento'}
+              </label>
               <input 
                 required
                 disabled={!isEditMode}

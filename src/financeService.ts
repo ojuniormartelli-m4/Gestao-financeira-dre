@@ -82,6 +82,13 @@ export const financeService = {
     }
   },
 
+  async createCreditCardTransaction(companyId: string, data: Omit<Transaction, 'id' | 'createdAt' | 'status'> & { userId?: string }) {
+    return this.adicionarTransacao(companyId, {
+      ...data,
+      status: 'PENDING'
+    });
+  },
+
   async editarTransacao(companyId: string, transactionId: string, data: Partial<Transaction>) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
