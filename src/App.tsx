@@ -16,6 +16,7 @@ import { ContactsPage } from './pages/Contacts';
 import { PaymentMethodsPage } from './pages/PaymentMethods';
 import { ExtractTransactionsPage } from './pages/ExtractTransactions';
 import { BalanceSheetPage } from './pages/BalanceSheet';
+import { CreditCardsPage } from './pages/CreditCards';
 import { OnboardingPage } from './pages/Onboarding';
 import { InfrastructureSetupPage } from './pages/InfrastructureSetup';
 import { AuthProvider } from './contexts/AuthContext';
@@ -106,6 +107,7 @@ export default function App() {
                   <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
                   <Route path="extrato" element={<ExtractTransactionsPage />} />
                   <Route path="balanco" element={<BalanceSheetPage />} />
+                  <Route path="cartoes" element={<CreditCardsPage />} />
                   <Route path="configuracoes" element={<SettingsPage />} />
                 </Route>
               </Routes>

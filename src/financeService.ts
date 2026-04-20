@@ -1048,9 +1048,14 @@ export const financeService = {
     }
   },
 
-  async excluirCartaoCredito(id: string) {
+  async excluirCartaoCredito(companyId: string, id: string) {
     try {
-      const { error } = await supabase.from('credit_cards').delete().eq('id', id);
+      const normalizedCompanyId = String(companyId || '').trim();
+      const { error } = await supabase
+        .from('credit_cards')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', normalizedCompanyId);
       if (error) throw error;
     } catch (error) {
       console.error('Supabase Error (excluirCartaoCredito):', error);
