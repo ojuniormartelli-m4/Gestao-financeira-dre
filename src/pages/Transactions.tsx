@@ -92,14 +92,6 @@ export function TransactionsPage() {
     setSearchParams(newParams);
   };
   
-  // Debug Logs
-  console.log('ID da Empresa atual:', companyId);
-  console.log('Contas recebidas no componente:', accounts);
-
-  if (accounts.length === 0 && !loading) {
-    console.warn('Nenhuma conta encontrada para este companyId:', companyId);
-  }
-
   const handleEdit = (tx: Transaction, mode: 'view' | 'edit' = 'view') => {
     setEditingTransaction(tx);
     setModalMode(mode);

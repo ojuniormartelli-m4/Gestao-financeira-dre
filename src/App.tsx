@@ -23,6 +23,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { SidebarProvider } from './contexts/SidebarContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { supabase, isConfigured } from './supabase';
 import { RefreshCw } from 'lucide-react';
 
@@ -91,30 +92,32 @@ export default function App() {
   }
 
   return (
-    <AuthProvider>
-      <CompanyProvider>
-        <FilterProvider>
-          <SidebarProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Layout />}>
-                  <Route index element={<DashboardPage />} />
-                  <Route path="transacoes" element={<TransactionsPage />} />
-                  <Route path="dre" element={<DREPage />} />
-                  <Route path="dfc" element={<CashFlowPage />} />
-                  <Route path="centros-custo" element={<CostCentersPage />} />
-                  <Route path="contatos" element={<ContactsPage />} />
-                  <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
-                  <Route path="extrato" element={<ExtractTransactionsPage />} />
-                  <Route path="balanco" element={<BalanceSheetPage />} />
-                  <Route path="cartoes" element={<CreditCardsPage />} />
-                  <Route path="configuracoes" element={<SettingsPage />} />
-                </Route>
-              </Routes>
-            </BrowserRouter>
-          </SidebarProvider>
-        </FilterProvider>
-      </CompanyProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <CompanyProvider>
+          <FilterProvider>
+            <SidebarProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Layout />}>
+                    <Route index element={<DashboardPage />} />
+                    <Route path="transacoes" element={<TransactionsPage />} />
+                    <Route path="dre" element={<DREPage />} />
+                    <Route path="dfc" element={<CashFlowPage />} />
+                    <Route path="centros-custo" element={<CostCentersPage />} />
+                    <Route path="contatos" element={<ContactsPage />} />
+                    <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
+                    <Route path="extrato" element={<ExtractTransactionsPage />} />
+                    <Route path="balanco" element={<BalanceSheetPage />} />
+                    <Route path="cartoes" element={<CreditCardsPage />} />
+                    <Route path="configuracoes" element={<SettingsPage />} />
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+            </SidebarProvider>
+          </FilterProvider>
+        </CompanyProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
