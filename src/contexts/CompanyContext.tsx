@@ -69,8 +69,8 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     
     if (!companyId || companyId === 'null') {
-      console.warn('[CompanyContext] ID inválido detectado em refreshData, restaurando padrão...');
-      setCompanyId('m4-digital');
+      console.warn('[CompanyContext] No valid companyId found. Data fetching skipped.');
+      setLoading(false);
       return;
     }
 

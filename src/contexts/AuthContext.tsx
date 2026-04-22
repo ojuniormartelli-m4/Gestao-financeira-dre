@@ -26,69 +26,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const savedUser = localStorage.getItem('finscale_user');
-      if (savedUser) {
-        try {
-          setUser(JSON.parse(savedUser));
-        } catch (e) {
-          localStorage.removeItem('finscale_user');
-        }
+    // Check for existing session
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await loadProfile(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
-    checkAuth();
+    getInitialSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await loadProfile(session.user.id);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const updateUser = (data: Partial<AppUser>) => {
-    if (!user) return;
-    const updatedUser = { ...user, ...data };
-    setUser(updatedUser);
-    localStorage.setItem('finscale_user', JSON.stringify(updatedUser));
-  };
-
-  const login = async (loginInput: string, passwordInput: string) => {
+  const loadProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('login', loginInput)
+        .eq('id', userId)
         .single();
-      
-      if (data && !error) {
-        // Verificação de status ativo
-        if (data.active === false) {
-          return { success: false, message: 'Sua conta foi desativada. Entre em contato com o administrador.' };
-        }
 
-        // Verificação de senha manual (texto plano mantido por compatibilidade com MVP, mas alertado no audit)
-        if (data.password === passwordInput) {
-          const appUser: AppUser = {
-            id: data.id,
-            companyId: data.company_id, // Usar o company_id do banco
-            name: data.name,
-            login: data.login,
-            roleId: data.role_id,
-            active: data.active !== false,
-            photoUrl: data.photo_url
-          };
-          
-          setUser(appUser);
-          localStorage.setItem('finscale_user', JSON.stringify(appUser));
-          return { success: true };
-        }
+      if (data && !error) {
+        setUser({
+          id: data.id,
+          companyId: data.company_id,
+          name: data.name,
+          login: data.login,
+          roleId: data.role_id,
+          active: data.active !== false,
+          photoUrl: data.photo_url
+        });
       }
-      return { success: false, message: 'Login ou senha incorretos.' };
+    } catch (e) {
+      console.error('Error loading profile:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateUser = (data: Partial<AppUser>) => {
+    if (!user) return;
+    setUser({ ...user, ...data });
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        return { success: false, message: 'Login ou senha incorretos.' };
+      }
+
+      if (data.user) {
+        await loadProfile(data.user.id);
+        
+        // Wait briefly for the state to update if needed
+        return { success: true };
+      }
+
+      return { success: false, message: 'Usuário não encontrado.' };
     } catch (error) {
       console.error("Erro no login:", error);
       return { success: false, message: 'Erro ao processar login.' };
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('finscale_user');
   };
 
   return (

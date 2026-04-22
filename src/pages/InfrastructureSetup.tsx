@@ -15,11 +15,10 @@ CREATE TABLE IF NOT EXISTS roles (
 
 -- 3. Criar Tabela de Perfis de Usuário
 CREATE TABLE IF NOT EXISTS profiles (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  id UUID PRIMARY KEY, -- Deve ser o mesmo ID do auth.users
   company_id TEXT NOT NULL,
   name TEXT NOT NULL,
-  login TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL, -- Recomendado usar Supabase Auth em produção
+  login TEXT UNIQUE NOT NULL, -- Email do usuário
   role_id TEXT REFERENCES roles(id),
   photo_url TEXT,
   active BOOLEAN DEFAULT true,

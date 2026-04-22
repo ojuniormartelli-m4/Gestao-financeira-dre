@@ -38,20 +38,45 @@ export async function createChartOfAccounts(companyId: string) {
   if (error) throw error;
 }
 
-export async function createAdminUser(companyId: string) {
-  const { data: existingAdmin } = await supabase.from('profiles').select('id').eq('login', 'admin').single();
+export async function createAdminUser(companyId: string, email: string = 'admin@finscale.com', password: string = 'admin123') {
+  // 1. Criar usuário no Supabase Auth
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email,
+    password,
+  });
 
-  if (!existingAdmin) {
-    const { error } = await supabase.from('profiles').insert([{
+  if (authError) {
+    if (authError.message.includes('User already registered')) {
+      console.log('Admin user already exists in Auth.');
+      // Tentar buscar o usuário existente para garantir que o perfil exista
+      const { data: { user: existingAuthUser } } = await supabase.auth.signInWithPassword({ email, password });
+      if (existingAuthUser) {
+        await ensureProfileExists(existingAuthUser.id, companyId, email);
+      }
+      return;
+    }
+    throw authError;
+  }
+
+  if (authData.user) {
+    await ensureProfileExists(authData.user.id, companyId, email);
+  }
+}
+
+async function ensureProfileExists(userId: string, companyId: string, email: string) {
+  const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', userId).single();
+
+  if (!existingProfile) {
+    const { error: profileError } = await supabase.from('profiles').insert([{
+      id: userId,
       company_id: companyId,
       name: 'Administrador do Sistema',
-      login: 'admin',
-      password: 'admin123',
+      login: email,
       role_id: 'admin-role',
-      photo_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+      photo_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
       active: true
     }]);
-    if (error) throw error;
+    if (profileError) throw profileError;
   }
 }
 

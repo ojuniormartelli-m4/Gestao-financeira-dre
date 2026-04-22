@@ -130,8 +130,8 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
                 </div>
                 <p className="text-sm text-text-secondary">
                   O sistema foi configurado com sucesso. Use as credenciais:<br/>
-                  <span className="inline-block mt-2 px-3 py-1 bg-surface rounded-lg font-mono text-text-primary">
-                    admin / admin123
+                  <span className="inline-block mt-2 px-3 py-1 bg-surface rounded-lg font-mono text-text-primary text-[11px]">
+                    admin@finscale.com / admin123
                   </span>
                 </p>
               </div>

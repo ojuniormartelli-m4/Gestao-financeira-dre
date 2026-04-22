@@ -48,14 +48,14 @@ export function LoginPage() {
           
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-secondary ml-1">Usuário</label>
+              <label className="text-xs font-bold uppercase tracking-widest text-text-secondary ml-1">E-mail</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
                 <input 
-                  type="text" 
+                  type="email" 
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="seu@email.com"
                   className="w-full bg-bg border border-border rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:border-accent transition-all"
                   required
                 />
