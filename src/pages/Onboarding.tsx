@@ -21,33 +21,45 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
   const companyId = 'default-company';
 
   const handleSetup = async () => {
+    console.log('[Onboarding] Iniciando processo de configuração...');
     setLoading(true);
     
     try {
       // Passo 1: Conexão
+      console.log('[Onboarding] Passo 1: Verificando Conexão...');
       setCurrentStep(1);
       await verifyConnection();
-      await new Promise(r => setTimeout(r, 800)); // Delay visual
+      await new Promise(r => setTimeout(r, 800)); 
 
       // Passo 2: Cargos
+      console.log('[Onboarding] Passo 2: Criando Cargos...');
       setCurrentStep(2);
       await createRoles();
       await new Promise(r => setTimeout(r, 800));
 
       // Passo 3: Plano de Contas
+      console.log('[Onboarding] Passo 3: Configurando Plano de Contas...');
       setCurrentStep(3);
       await createChartOfAccounts(companyId);
       await new Promise(r => setTimeout(r, 800));
 
       // Passo 4: Usuário
+      console.log('[Onboarding] Passo 4: Criando Usuário Mestre...');
       setCurrentStep(4);
       await createAdminUser(companyId);
       await new Promise(r => setTimeout(r, 800));
 
+      console.log('[Onboarding] Configuração concluída com sucesso!');
       setCurrentStep(5);
-    } catch (error) {
-      console.error(error);
-      alert('Erro durante a configuração. Verifique sua conexão.');
+      
+      // Auto-redirecionar após 2 segundos de sucesso
+      setTimeout(() => {
+        onComplete();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('[Onboarding] Erro durante o setup:', error);
+      alert('Erro durante a configuração: ' + (error.message || 'Erro desconhecido.'));
       setCurrentStep(0);
     } finally {
       setLoading(false);
@@ -130,10 +142,14 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
                 </div>
                 <p className="text-sm text-text-secondary">
                   O sistema foi configurado com sucesso. Use as credenciais:<br/>
-                  <span className="inline-block mt-2 px-3 py-1 bg-surface rounded-lg font-mono text-text-primary text-[11px]">
-                    admin@finscale.com / admin123
+                  <span className="inline-block mt-2 px-3 py-1 bg-surface rounded-lg font-mono text-text-primary">
+                    admin / admin123
                   </span>
                 </p>
+                <div className="pt-2 flex items-center justify-center gap-2 text-[10px] text-accent font-bold uppercase tracking-widest animate-pulse">
+                  <RefreshCw size={12} className="animate-spin" />
+                  Redirecionando para o login...
+                </div>
               </div>
               
               <button 
@@ -147,6 +163,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
           ) : (
             <motion.button 
               key="action"
+              type="button"
               onClick={handleSetup}
               disabled={loading}
               className="w-full bg-accent text-bg font-bold py-5 rounded-3xl hover:opacity-90 transition-all shadow-xl shadow-accent/20 flex items-center justify-center gap-3 text-lg disabled:opacity-50 group"
@@ -158,7 +175,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
                 </>
               ) : (
                 <>
-                  Iniciar Configuração
+                  Primeiro Acesso - Iniciar Configuração
                   <Rocket size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                 </>
               )}

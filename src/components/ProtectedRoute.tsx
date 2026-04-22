@@ -20,5 +20,10 @@ export function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
+  // Se o usuário precisa trocar a senha e não está na página de troca, redireciona
+  if (user.mustChangePassword && window.location.pathname !== '/trocar-senha') {
+    return <Navigate to="/trocar-senha" replace />;
+  }
+
   return <Outlet />;
 }

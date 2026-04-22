@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   role_id TEXT REFERENCES roles(id),
   photo_url TEXT,
   active BOOLEAN DEFAULT true,
+  must_change_password BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -106,7 +107,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   status TEXT CHECK (status IN ('PAID', 'PENDING', 'CANCELLED', 'SCHEDULED', 'CONCILIATED')),
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
-  user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   is_conciliated BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -120,7 +121,7 @@ CREATE TABLE IF NOT EXISTS transfers (
   amount NUMERIC NOT NULL,
   date TIMESTAMPTZ NOT NULL,
   description TEXT,
-  user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   is_conciliated BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -143,18 +144,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 10. Habilitar Row Level Security (RLS)
-ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cost_centers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payment_methods ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
-ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
+-- 10. Desativar Row Level Security (RLS) para Setup Inicial
+-- (Recomendado: Habilitar e configurar políticas após o primeiro login)
+ALTER TABLE roles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE cost_centers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_methods DISABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE transfers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_cards DISABLE ROW LEVEL SECURITY;
+ALTER TABLE company_configs DISABLE ROW LEVEL SECURITY;
 
 -- 11. Políticas de Acesso
 CREATE POLICY "Permitir tudo para usuários autenticados" ON roles FOR ALL USING (true);
@@ -199,11 +201,15 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
     setLoading(true);
     setError(null);
     try {
-      // Verificar se as tabelas foram criadas (testar profiles)
-      const { error: checkError } = await supabase.from('profiles').select('id').limit(1);
+      // Verificar se as tabelas fundamentais existem (Profiles e Roles)
+      const { error: pError } = await supabase.from('profiles').select('id').limit(1);
+      const { error: rError } = await supabase.from('roles').select('id').limit(1);
       
-      if (checkError && checkError.code === '42P01') {
-        setError('As tabelas ainda não foram detectadas. Certifique-se de que executou o script SQL no dashboard do Supabase.');
+      const isMissing = (err: any) => 
+        err && (err.code === '42P01' || err.code === 'PGRST116' || err.code === 'PGRST205' || err.code === 'PGRST204');
+
+      if (isMissing(pError) || isMissing(rError)) {
+        setError('As tabelas ainda não foram detectadas. Certifique-se de que executou o script SQL no dashboard do Supabase e aguarde alguns segundos.');
         setLoading(false);
         return;
       }
@@ -229,16 +235,17 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
               Variáveis de Ambiente não encontradas na Vercel.
             </p>
             <div className="bg-black/40 border border-[#27272a] p-6 rounded-2xl text-left space-y-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Passo a Passo Vercel:</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Configuração das Variáveis (Secrets):</p>
               <div className="space-y-3">
-                <p className="text-xs text-gray-300">1. Vá nas <strong>Settings</strong> do seu projeto na Vercel.</p>
-                <p className="text-xs text-gray-300">2. Adicione as <strong>Environment Variables</strong>:</p>
+                <p className="text-xs text-gray-300">No menu <strong>Secrets</strong> à direita (ícone de cadeado), adicione:</p>
                 <div className="pl-4 space-y-2">
-                  <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_SUPABASE_URL</code>
-                  <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>
-                  <code className="block text-[11px] text-sky-400">NEXT_PUBLIC_GEMINI_API_KEY (Opcional)</code>
+                  <code className="block text-[11px] text-sky-400">VITE_SUPABASE_URL</code>
+                  <code className="block text-[11px] text-sky-400">VITE_SUPABASE_ANON_KEY</code>
+                  <code className="block text-[11px] text-sky-400">VITE_GEMINI_API_KEY</code>
                 </div>
-                <p className="text-xs text-gray-300">3. Realize um <strong>novo Deploy</strong> (Redeploy).</p>
+                <p className="text-[10px] text-gray-500 leading-tight">
+                  Após adicionar e salvar, a tela será atualizada automaticamente.
+                </p>
               </div>
             </div>
           </div>

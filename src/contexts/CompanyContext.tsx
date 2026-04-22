@@ -120,14 +120,18 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    if (user && companyId && companyId !== 'null') {
+    // IMPORTANTE: Se o usuário precisa trocar a senha, NÃO BUSCAR DADOS
+    // Isso evita o erro 406 (Not Acceptable) que trava a sessão no Supabase
+    if (user && companyId && companyId !== 'null' && !user.mustChangePassword) {
       const init = async () => {
         await financeService.verificarEPovoarDadosIniciais(companyId);
         await Promise.all([refreshConfig(), refreshData()]);
       };
       init();
+    } else {
+      setLoading(false);
     }
-  }, [user, companyId]);
+  }, [user, companyId, user?.mustChangePassword]);
 
   const setCompanyConfig = (config: CompanyConfig) => {
     setCompanyConfigState(config);

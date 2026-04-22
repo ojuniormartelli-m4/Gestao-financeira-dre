@@ -18,6 +18,7 @@ import { ExtractTransactionsPage } from './pages/ExtractTransactions';
 import { BalanceSheetPage } from './pages/BalanceSheet';
 import { CreditCardsPage } from './pages/CreditCards';
 import { OnboardingPage } from './pages/Onboarding';
+import { ChangePasswordPage } from './pages/ChangePassword';
 import { InfrastructureSetupPage } from './pages/InfrastructureSetup';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage } from './pages/Login';
@@ -40,20 +41,35 @@ export default function App() {
     if (!isSupabaseSetup) return;
     
     try {
-      // Verificar se existem usuários ou cargos no Supabase
-      const { data: usersData, error: usersError } = await supabase.from('profiles').select('id').limit(1);
-      const { data: rolesData, error: rolesError } = await supabase.from('roles').select('id').limit(1);
+      // Verificar se as tabelas fundamentais existem
+      const { error: usersError } = await supabase.from('profiles').select('id').limit(1);
+      const { error: rolesError } = await supabase.from('roles').select('id').limit(1);
 
-      // Se a tabela não existe (42P01), redirecionamos para a tela de inicialização SQL
-      if ((usersError && usersError.code === '42P01') || (rolesError && rolesError.code === '42P01')) {
+      // Função auxiliar para identificar se o erro é de "Tabela Inexistente"
+      const isTableMissingError = (error: any) => {
+        if (!error) return false;
+        return (
+          error.code === '42P01' || // Postgres: Undefined Table
+          error.code === 'PGRST205' || // PostgREST: Table not found in cache
+          error.code === 'PGRST204' || // PostgREST: Relation not found
+          (error.message && error.message.includes('not find the table'))
+        );
+      };
+
+      if (isTableMissingError(usersError) || isTableMissingError(rolesError)) {
+        console.log('[FinScale] Tabelas ausentes detectadas. Redirecionando para Setup SQL...');
         setIsTableMissing(true);
         return;
       }
 
+      // Se chegamos aqui, as tabelas existem. Vamos ver se estão vazias.
+      const { data: usersData } = await supabase.from('profiles').select('id').limit(1);
+      const { data: rolesData } = await supabase.from('roles').select('id').limit(1);
+
       setIsSystemEmpty(!usersData?.length && !rolesData?.length);
     } catch (error) {
       console.error('Erro ao verificar status do sistema:', error);
-      setIsSystemEmpty(false); // Fallback para login em caso de erro
+      setIsSystemEmpty(false); 
     }
   }, [isSupabaseSetup]);
 
@@ -103,6 +119,7 @@ export default function App() {
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
                   <Route element={<ProtectedRoute />}>
+                    <Route path="/trocar-senha" element={<ChangePasswordPage />} />
                     <Route path="/" element={<Layout />}>
                       <Route index element={<DashboardPage />} />
                       <Route path="transacoes" element={<TransactionsPage />} />

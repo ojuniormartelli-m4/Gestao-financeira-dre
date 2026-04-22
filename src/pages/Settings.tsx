@@ -511,12 +511,12 @@ export function SettingsPage() {
                 <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddUser} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <Input label="Nome Completo" value={newUser.name} onChange={(v: string) => setNewUser({...newUser, name: v})} />
-                    <Input label="E-mail (Login)" type="email" value={newUser.login} onChange={(v: string) => setNewUser({...newUser, login: v})} />
+                    <Input label="Usuário (Login)" value={newUser.login} onChange={(v: string) => setNewUser({...newUser, login: v})} placeholder="ex: joao.silva" />
                     <Select label="Cargo" value={newUser.roleId} onChange={(v: string) => setNewUser({...newUser, roleId: v})} options={roles.map(r => ({v: r.id, l: r.name}))} />
                   </div>
                   <div className="flex bg-accent/5 p-4 rounded-xl items-center gap-3 border border-accent/10">
                     <AlertCircle className="text-accent" size={18} />
-                    <p className="text-[10px] text-text-secondary">O usuário receberá acesso assim que registrar sua conta com o e-mail acima.</p>
+                    <p className="text-[10px] text-text-secondary">O usuário será criado com o e-mail interno para compatibilidade com o sistema de autenticação.</p>
                   </div>
                   <div className="flex justify-end gap-2">
                     <button type="button" onClick={() => setIsAddingUser(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>

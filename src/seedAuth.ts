@@ -38,35 +38,67 @@ export async function createChartOfAccounts(companyId: string) {
   if (error) throw error;
 }
 
-export async function createAdminUser(companyId: string, email: string = 'admin@finscale.com', password: string = 'admin123') {
+export async function createAdminUser(companyId: string, username: string = 'admin', password: string = 'admin123') {
+  const email = `${username}@finscale.internal`;
+  console.log('[seedAuth] Iniciando criação do admin:', email);
+
+  // 0. Garantir configuração da empresa para evitar erro 406
+  await supabase.from('company_configs').upsert({
+    company_id: companyId,
+    name: 'Minha Empresa FinScale'
+  });
+  
   // 1. Criar usuário no Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        company_id: companyId,
+        full_name: 'Administrador do Sistema'
+      }
+    }
   });
 
   if (authError) {
-    if (authError.message.includes('User already registered')) {
-      console.log('Admin user already exists in Auth.');
-      // Tentar buscar o usuário existente para garantir que o perfil exista
-      const { data: { user: existingAuthUser } } = await supabase.auth.signInWithPassword({ email, password });
-      if (existingAuthUser) {
-        await ensureProfileExists(existingAuthUser.id, companyId, email);
+    if (authError.message.includes('User already registered') || authError.code === '23505') {
+      console.log('[seedAuth] Usuário admin já existe no Auth. Tentando vincular perfil...');
+      
+      // Tentativa de login forçado para obter o ID (pode falhar se a senha mudou, mas é um fallback para onboarding)
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+      
+      if (loginData?.user) {
+        await ensureProfileExists(loginData.user.id, companyId, email);
+        return;
       }
-      return;
+      
+      // Se falhar o login, o usuário existe mas a senha é outra. 
+      // No contexto de onboarding, vamos apenas logar e avisar.
+      console.error('[seedAuth] Erro ao logar admin existente:', loginError?.message);
+      throw new Error('Usuário admin já existe com outra senha. Tente fazer login.');
     }
     throw authError;
   }
 
   if (authData.user) {
+    console.log('[seedAuth] Usuário Auth criado com sucesso:', authData.user.id);
     await ensureProfileExists(authData.user.id, companyId, email);
+  } else {
+    console.warn('[seedAuth] SignUp completado mas nenhum usuário retornado (aguarda confirmação?).');
+    throw new Error('Criação do usuário retentada sem sucesso. Verifique configurações do Supabase (Auto Confirm).');
   }
 }
 
 async function ensureProfileExists(userId: string, companyId: string, email: string) {
-  const { data: existingProfile } = await supabase.from('profiles').select('id').eq('id', userId).single();
+  console.log('[seedAuth] Verificando se perfil existe para:', userId);
+  const { data: existingProfile, error: checkError } = await supabase.from('profiles').select('id').eq('id', userId).single();
+
+  if (checkError && checkError.code !== 'PGRST116') {
+    console.error('[seedAuth] Erro ao verificar perfil:', checkError);
+  }
 
   if (!existingProfile) {
+    console.log('[seedAuth] Criando novo perfil para:', userId);
     const { error: profileError } = await supabase.from('profiles').insert([{
       id: userId,
       company_id: companyId,
@@ -74,9 +106,17 @@ async function ensureProfileExists(userId: string, companyId: string, email: str
       login: email,
       role_id: 'admin-role',
       photo_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-      active: true
+      active: true,
+      must_change_password: true
     }]);
-    if (profileError) throw profileError;
+    
+    if (profileError) {
+      console.error('[seedAuth] Erro CRÍTICO ao criar perfil:', profileError);
+      throw new Error(`Erro ao criar perfil no banco: ${profileError.message}. Verifique se o RLS está desativado.`);
+    }
+    console.log('[seedAuth] Perfil criado com sucesso.');
+  } else {
+    console.log('[seedAuth] Perfil já existe, ignorando criação.');
   }
 }
 

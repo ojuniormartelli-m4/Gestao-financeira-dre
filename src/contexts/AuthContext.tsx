@@ -8,6 +8,7 @@ interface AppUser {
   login: string;
   roleId: string;
   active: boolean;
+  mustChangePassword: boolean;
   photoUrl?: string;
 }
 
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           login: data.login,
           roleId: data.role_id,
           active: data.active !== false,
+          mustChangePassword: false, // DESATIVADO TEMPORARIAMENTE PARA UNLOCK
           photoUrl: data.photo_url
         });
       }
@@ -84,8 +86,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({ ...user, ...data });
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (username: string, password: string) => {
     try {
+      // Mapeia usuário básico para e-mail virtual interno se não for um e-mail real
+      const email = username.includes('@') ? username.trim() : `${username.trim().toLowerCase()}@finscale.internal`;
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password

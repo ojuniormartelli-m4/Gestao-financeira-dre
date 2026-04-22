@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'motion/react';
-import { Lock, User, RefreshCw, AlertCircle } from 'lucide-react';
+import { Lock, User, RefreshCw, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -48,14 +49,14 @@ export function LoginPage() {
           
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-text-secondary ml-1">E-mail</label>
+              <label className="text-xs font-bold uppercase tracking-widest text-text-secondary ml-1">Usuário</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
                 <input 
-                  type="email" 
+                  type="text" 
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="seu@email.com"
+                  placeholder="admin"
                   className="w-full bg-bg border border-border rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:border-accent transition-all"
                   required
                 />
@@ -67,13 +68,20 @@ export function LoginPage() {
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary" size={18} />
                 <input 
-                  type="password" 
+                  type={showPassword ? "text" : "password"} 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-bg border border-border rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:border-accent transition-all"
+                  className="w-full bg-bg border border-border rounded-2xl py-4 pl-12 pr-12 text-sm focus:outline-none focus:border-accent transition-all"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-text-secondary hover:text-accent transition-colors"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
