@@ -16,9 +16,10 @@ CREATE TABLE IF NOT EXISTS roles (
 -- 3. Criar Tabela de Perfis de Usuário
 CREATE TABLE IF NOT EXISTS profiles (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  company_id TEXT NOT NULL,
   name TEXT NOT NULL,
   login TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
+  password TEXT NOT NULL, -- Recomendado usar Supabase Auth em produção
   role_id TEXT REFERENCES roles(id),
   photo_url TEXT,
   active BOOLEAN DEFAULT true,
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
   company_id TEXT NOT NULL,
   name TEXT NOT NULL,
   bank_name TEXT,
+  type TEXT, -- CHECKING, SAVINGS, CASH, CREDIT_CARD
   initial_balance NUMERIC DEFAULT 0,
   current_balance NUMERIC DEFAULT 0,
   color TEXT,
@@ -102,7 +104,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
   payment_method_id TEXT REFERENCES payment_methods(id) ON DELETE SET NULL,
   credit_card_id TEXT REFERENCES credit_cards(id) ON DELETE SET NULL,
-  status TEXT CHECK (status IN ('PAID', 'PENDING')),
+  status TEXT CHECK (status IN ('PAID', 'PENDING', 'CANCELLED', 'SCHEDULED', 'CONCILIATED')),
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
   user_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
@@ -132,7 +134,17 @@ CREATE TABLE IF NOT EXISTS company_configs (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 9. Habilitar Row Level Security (RLS)
+-- 9. Função RPC para Atualizar Saldo Atomicamente
+CREATE OR REPLACE FUNCTION increment_balance(account_id TEXT, amount_to_add NUMERIC)
+RETURNS void AS $$
+BEGIN
+  UPDATE bank_accounts
+  SET current_balance = current_balance + amount_to_add
+  WHERE id = account_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 10. Habilitar Row Level Security (RLS)
 ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
@@ -145,8 +157,7 @@ ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
 
--- 10. Políticas de Acesso (Simplificadas para o App - Permitir tudo para autenticados)
--- Nota: Para produção real, restrinja por company_id ou user_id
+-- 11. Políticas de Acesso
 CREATE POLICY "Permitir tudo para usuários autenticados" ON roles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON profiles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON bank_accounts FOR ALL USING (true);
@@ -159,9 +170,7 @@ CREATE POLICY "Permitir tudo para usuários autenticados" ON transactions FOR AL
 CREATE POLICY "Permitir tudo para usuários autenticados" ON transfers FOR ALL USING (true);
 CREATE POLICY "Permitir tudo para usuários autenticados" ON company_configs FOR ALL USING (true);
 
--- 11. Configuração de Storage Buckets
--- Execute estes comandos para permitir acesso público aos arquivos
--- Certifique-se de criar os buckets 'avatars' e 'branding' no painel
+-- 12. Configuração de Storage Buckets
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('branding', 'branding', true) ON CONFLICT (id) DO NOTHING;
 

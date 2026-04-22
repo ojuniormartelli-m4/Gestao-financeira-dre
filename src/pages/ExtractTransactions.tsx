@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { LoginPage } from './Login';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function ExtractTransactionsPage() {
@@ -108,7 +107,6 @@ export function ExtractTransactionsPage() {
   }, [transactions, selectedAccount]);
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
-  if (!user) return <LoginPage />;
 
   return (
     <div className="space-y-6">

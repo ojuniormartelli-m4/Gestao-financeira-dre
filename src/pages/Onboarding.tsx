@@ -18,7 +18,7 @@ const STEPS = [
 export function OnboardingPage({ onComplete }: OnboardingProps) {
   const [currentStep, setCurrentStep] = useState(0); // 0 = initial, 1-4 = steps, 5 = success
   const [loading, setLoading] = useState(false);
-  const companyId = 'm4-digital';
+  const companyId = 'default-company';
 
   const handleSetup = async () => {
     setLoading(true);
@@ -41,7 +41,7 @@ export function OnboardingPage({ onComplete }: OnboardingProps) {
 
       // Passo 4: Usuário
       setCurrentStep(4);
-      await createAdminUser();
+      await createAdminUser(companyId);
       await new Promise(r => setTimeout(r, 800));
 
       setCurrentStep(5);

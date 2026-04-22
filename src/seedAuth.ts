@@ -38,11 +38,12 @@ export async function createChartOfAccounts(companyId: string) {
   if (error) throw error;
 }
 
-export async function createAdminUser() {
+export async function createAdminUser(companyId: string) {
   const { data: existingAdmin } = await supabase.from('profiles').select('id').eq('login', 'admin').single();
 
   if (!existingAdmin) {
     const { error } = await supabase.from('profiles').insert([{
+      company_id: companyId,
       name: 'Administrador do Sistema',
       login: 'admin',
       password: 'admin123',
@@ -55,12 +56,12 @@ export async function createAdminUser() {
 }
 
 // Mantendo compatibilidade se necessário
-export async function seedAuthData(companyId?: string) {
+export async function seedAuthData(companyId: string) {
   try {
     await verifyConnection();
     await createRoles();
-    if (companyId) await createChartOfAccounts(companyId);
-    await createAdminUser();
+    await createChartOfAccounts(companyId);
+    await createAdminUser(companyId);
     return { success: true };
   } catch (error) {
     console.error(error);

@@ -111,10 +111,6 @@ export function DREPage() {
     );
   }
 
-  if (!user) {
-    return <LoginPage />;
-  }
-
   return (
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">

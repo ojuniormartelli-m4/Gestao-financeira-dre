@@ -219,10 +219,6 @@ export function TransactionsPage() {
     );
   }
 
-  if (!user) {
-    return <LoginPage />;
-  }
-
   const filteredTransactions = transactions.filter(t => {
     const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;

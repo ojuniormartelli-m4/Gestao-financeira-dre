@@ -42,7 +42,6 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { LoginPage } from './Login';
 
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -197,10 +196,6 @@ export function DashboardPage() {
         <RefreshCw className="w-8 h-8 text-accent animate-spin" />
       </div>
     );
-  }
-
-  if (!user) {
-    return <LoginPage />;
   }
 
   const COLORS = ['#00E699', '#00C2FF', '#FFB800', '#FF4D4D', '#A855F7'];

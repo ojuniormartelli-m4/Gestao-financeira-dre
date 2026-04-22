@@ -19,6 +19,8 @@ import { BalanceSheetPage } from './pages/BalanceSheet';
 import { CreditCardsPage } from './pages/CreditCards';
 import { OnboardingPage } from './pages/Onboarding';
 import { InfrastructureSetupPage } from './pages/InfrastructureSetup';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { LoginPage } from './pages/Login';
 import { AuthProvider } from './contexts/AuthContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { FilterProvider } from './contexts/FilterContext';
@@ -99,18 +101,21 @@ export default function App() {
             <SidebarProvider>
               <BrowserRouter>
                 <Routes>
-                  <Route path="/" element={<Layout />}>
-                    <Route index element={<DashboardPage />} />
-                    <Route path="transacoes" element={<TransactionsPage />} />
-                    <Route path="dre" element={<DREPage />} />
-                    <Route path="dfc" element={<CashFlowPage />} />
-                    <Route path="centros-custo" element={<CostCentersPage />} />
-                    <Route path="contatos" element={<ContactsPage />} />
-                    <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
-                    <Route path="extrato" element={<ExtractTransactionsPage />} />
-                    <Route path="balanco" element={<BalanceSheetPage />} />
-                    <Route path="cartoes" element={<CreditCardsPage />} />
-                    <Route path="configuracoes" element={<SettingsPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route element={<ProtectedRoute />}>
+                    <Route path="/" element={<Layout />}>
+                      <Route index element={<DashboardPage />} />
+                      <Route path="transacoes" element={<TransactionsPage />} />
+                      <Route path="dre" element={<DREPage />} />
+                      <Route path="dfc" element={<CashFlowPage />} />
+                      <Route path="centros-custo" element={<CostCentersPage />} />
+                      <Route path="contatos" element={<ContactsPage />} />
+                      <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
+                      <Route path="extrato" element={<ExtractTransactionsPage />} />
+                      <Route path="balanco" element={<BalanceSheetPage />} />
+                      <Route path="cartoes" element={<CreditCardsPage />} />
+                      <Route path="configuracoes" element={<SettingsPage />} />
+                    </Route>
                   </Route>
                 </Routes>
               </BrowserRouter>

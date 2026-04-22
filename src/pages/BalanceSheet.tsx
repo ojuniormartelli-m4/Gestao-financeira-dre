@@ -17,7 +17,6 @@ import {
   Info
 } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
-import { LoginPage } from './Login';
 
 export function BalanceSheetPage() {
   const [loading, setLoading] = useState(true);
@@ -86,7 +85,6 @@ export function BalanceSheetPage() {
   }, [bankAccounts, localCreditCards, pendingTransactions]);
 
   if (authLoading || companyLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
-  if (!user) return <LoginPage />;
 
   return (
     <div className="space-y-8">

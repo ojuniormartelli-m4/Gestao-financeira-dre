@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 
 interface AppUser {
   id: string;
+  companyId: string;
   name: string;
   login: string;
   roleId: string;
@@ -61,10 +62,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { success: false, message: 'Sua conta foi desativada. Entre em contato com o administrador.' };
         }
 
-        // Verificação de senha manual (texto plano para este MVP conforme solicitado)
+        // Verificação de senha manual (texto plano mantido por compatibilidade com MVP, mas alertado no audit)
         if (data.password === passwordInput) {
           const appUser: AppUser = {
             id: data.id,
+            companyId: data.company_id, // Usar o company_id do banco
             name: data.name,
             login: data.login,
             roleId: data.role_id,

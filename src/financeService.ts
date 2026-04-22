@@ -55,24 +55,14 @@ export const financeService = {
 
       // Atualizar saldo da conta bancária se a PRIMEIRA transação estiver paga e não for cartão de crédito
       if (data.status === 'PAID' && data.bankAccountId && !data.creditCardId) {
-        const { data: bank, error: bankError } = await supabase
-          .from('bank_accounts')
-          .select('current_balance')
-          .eq('id', data.bankAccountId)
-          .single();
-
-        if (bank && !bankError) {
-          const currentBalance = bank.current_balance || 0;
-          // Subtrai/Soma apenas o valor da PRIMEIRA parcela (ou valor total se não parcelado)
-          const newBalance = data.type === 'REVENUE' 
-            ? Number(currentBalance) + amountPerInstallment 
-            : Number(currentBalance) - amountPerInstallment;
-          
-          await supabase
-            .from('bank_accounts')
-            .update({ current_balance: newBalance })
-            .eq('id', data.bankAccountId);
-        }
+        const balanceChange = data.type === 'REVENUE' 
+          ? Number(amountPerInstallment) 
+          : -Number(amountPerInstallment);
+        
+        await supabase.rpc('increment_balance', { 
+          account_id: data.bankAccountId, 
+          amount_to_add: balanceChange 
+        });
       }
 
       return insertedData[0].id;
@@ -137,11 +127,11 @@ export const financeService = {
       if (isPaidNow || wasPaid) {
         // Estornar antigo (se existia)
         if (wasPaid && oldTx.bank_account_id) {
-          const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', oldTx.bank_account_id).single();
-          if (bank) {
-            const adj = oldTx.type === 'REVENUE' ? -oldTx.amount : oldTx.amount;
-            await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + adj }).eq('id', oldTx.bank_account_id);
-          }
+          const adj = oldTx.type === 'REVENUE' ? -oldTx.amount : oldTx.amount;
+          await supabase.rpc('increment_balance', { 
+            account_id: oldTx.bank_account_id, 
+            amount_to_add: adj 
+          });
         }
         
         // Aplicar novo (se estiver pago)
@@ -151,11 +141,11 @@ export const financeService = {
           const finalType = data.type || oldTx.type;
           
           if (finalBankId) {
-            const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', finalBankId).single();
-            if (bank) {
-              const adj = finalType === 'REVENUE' ? finalAmount : -finalAmount;
-              await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + adj }).eq('id', finalBankId);
-            }
+            const adj = finalType === 'REVENUE' ? finalAmount : -finalAmount;
+            await supabase.rpc('increment_balance', { 
+              account_id: finalBankId, 
+              amount_to_add: adj 
+            });
           }
         }
       }
@@ -187,11 +177,11 @@ export const financeService = {
       if (error) throw error;
 
       if (tx.status === 'PAID' && tx.bank_account_id) {
-        const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', tx.bank_account_id).single();
-        if (bank) {
-          const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
-          await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + adj }).eq('id', tx.bank_account_id);
-        }
+        const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
+        await supabase.rpc('increment_balance', { 
+          account_id: tx.bank_account_id, 
+          amount_to_add: adj 
+        });
       }
     } catch (error) {
       console.error('Supabase Error (excluirTransacao):', error);
@@ -359,6 +349,7 @@ export const financeService = {
           company_id: normalizedCompanyId,
           name: data.name,
           bank_name: data.bankName,
+          type: data.type,
           initial_balance: Number(data.initialBalance),
           current_balance: Number(data.initialBalance),
           color: data.color
@@ -410,17 +401,17 @@ export const financeService = {
 
       if (error) throw error;
 
-      // Em produção usar RPC ou triggers para atomicidade
-      // Aqui vamos buscar e atualizar manual (simplificado conforme original)
-      const { data: fromBank } = await supabase.from('bank_accounts').select('current_balance').eq('id', data.fromAccountId).single();
-      const { data: toBank } = await supabase.from('bank_accounts').select('current_balance').eq('id', data.toAccountId).single();
-
-      if (fromBank) {
-        await supabase.from('bank_accounts').update({ current_balance: fromBank.current_balance - data.amount }).eq('id', data.fromAccountId);
-      }
-      if (toBank) {
-        await supabase.from('bank_accounts').update({ current_balance: toBank.current_balance + data.amount }).eq('id', data.toAccountId);
-      }
+      // Atualizar saldos atomicamente via RPC
+      await Promise.all([
+        supabase.rpc('increment_balance', { 
+          account_id: data.fromAccountId, 
+          amount_to_add: -data.amount 
+        }),
+        supabase.rpc('increment_balance', { 
+          account_id: data.toAccountId, 
+          amount_to_add: data.amount 
+        })
+      ]);
     } catch (error) {
       console.error('Supabase Error (realizarTransferencia):', error);
       throw error;
@@ -504,42 +495,18 @@ export const financeService = {
 
       // Se mudou para pago, atualizar saldo
       if (status === 'PAID' && tx.bank_account_id) {
-        const { data: bank, error: bankError } = await supabase
-          .from('bank_accounts')
-          .select('current_balance')
-          .eq('id', tx.bank_account_id)
-          .single();
-
-        if (bank && !bankError) {
-          const currentBalance = bank.current_balance || 0;
-          const newBalance = tx.type === 'REVENUE' 
-            ? currentBalance + tx.amount 
-            : currentBalance - tx.amount;
-          
-          await supabase
-            .from('bank_accounts')
-            .update({ current_balance: newBalance })
-            .eq('id', tx.bank_account_id);
-        }
+        const adj = tx.type === 'REVENUE' ? tx.amount : -tx.amount;
+        await supabase.rpc('increment_balance', { 
+          account_id: tx.bank_account_id, 
+          amount_to_add: adj 
+        });
       } else if (status === 'PENDING' && tx.status === 'PAID' && tx.bank_account_id) {
         // Se mudou de pago para pendente, estornar saldo
-        const { data: bank, error: bankError } = await supabase
-          .from('bank_accounts')
-          .select('current_balance')
-          .eq('id', tx.bank_account_id)
-          .single();
-
-        if (bank && !bankError) {
-          const currentBalance = bank.current_balance || 0;
-          const newBalance = tx.type === 'REVENUE' 
-            ? currentBalance - tx.amount 
-            : currentBalance + tx.amount;
-          
-          await supabase
-            .from('bank_accounts')
-            .update({ current_balance: newBalance })
-            .eq('id', tx.bank_account_id);
-        }
+        const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
+        await supabase.rpc('increment_balance', { 
+          account_id: tx.bank_account_id, 
+          amount_to_add: adj 
+        });
       }
     } catch (error) {
       console.error('Supabase Error (quitarTransacao):', error);
@@ -678,13 +645,13 @@ export const financeService = {
         
         // Categorias Padrão
         const defaultCategories = [
-          { company_id: normalizedCompanyId, name: 'Vendas de Produtos', type: 'REVENUE', dre_group: 'Receita Bruta' },
-          { company_id: normalizedCompanyId, name: 'Prestação de Serviços', type: 'REVENUE', dre_group: 'Receita Bruta' },
-          { company_id: normalizedCompanyId, name: 'Aluguel', type: 'EXPENSE', dre_group: 'Custos Fixos' },
-          { company_id: normalizedCompanyId, name: 'Salários', type: 'EXPENSE', dre_group: 'Custos Fixos' },
-          { company_id: normalizedCompanyId, name: 'Marketing', type: 'EXPENSE', dre_group: 'Custos Variáveis' },
-          { company_id: normalizedCompanyId, name: 'Impostos', type: 'EXPENSE', dre_group: 'Impostos' },
-          { company_id: normalizedCompanyId, name: 'Material de Escritório', type: 'EXPENSE', dre_group: 'Custos Fixos' }
+          { company_id: normalizedCompanyId, name: 'Vendas de Produtos', type: 'REVENUE', dre_group: 'GROSS_REVENUE' },
+          { company_id: normalizedCompanyId, name: 'Prestação de Serviços', type: 'REVENUE', dre_group: 'GROSS_REVENUE' },
+          { company_id: normalizedCompanyId, name: 'Aluguel', type: 'EXPENSE', dre_group: 'FIXED_COST' },
+          { company_id: normalizedCompanyId, name: 'Salários', type: 'EXPENSE', dre_group: 'FIXED_COST' },
+          { company_id: normalizedCompanyId, name: 'Marketing', type: 'EXPENSE', dre_group: 'VARIABLE_COST' },
+          { company_id: normalizedCompanyId, name: 'Impostos', type: 'EXPENSE', dre_group: 'TAX' },
+          { company_id: normalizedCompanyId, name: 'Material de Escritório', type: 'EXPENSE', dre_group: 'FIXED_COST' }
         ];
 
         // Formas de Pagamento Padrão
@@ -762,10 +729,10 @@ export const financeService = {
       });
 
       if (totalBalanceChange !== 0) {
-        const { data: bank } = await supabase.from('bank_accounts').select('current_balance').eq('id', bankAccountId).single();
-        if (bank) {
-          await supabase.from('bank_accounts').update({ current_balance: bank.current_balance + totalBalanceChange }).eq('id', bankAccountId);
-        }
+        await supabase.rpc('increment_balance', { 
+          account_id: bankAccountId, 
+          amount_to_add: totalBalanceChange 
+        });
       }
     } catch (error) {
       console.error('Supabase Error (importarTransacoes):', error);
@@ -1170,22 +1137,11 @@ export const financeService = {
 
       if (updateError) throw updateError;
 
-      // 5. Atualizar saldo da conta bancária
-      const { data: bank } = await supabase
-        .from('bank_accounts')
-        .select('current_balance')
-        .eq('id', accountId)
-        .single();
-
-      if (bank) {
-        const currentBalance = bank.current_balance || 0;
-        const newBalance = Number(currentBalance) - amount;
-        
-        await supabase
-          .from('bank_accounts')
-          .update({ current_balance: newBalance })
-          .eq('id', accountId);
-      }
+      // 5. Atualizar saldo da conta bancária atomicamente via RPC
+      await supabase.rpc('increment_balance', { 
+        account_id: accountId, 
+        amount_to_add: -amount 
+      });
 
       return tx.id;
     } catch (error) {

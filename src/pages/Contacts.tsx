@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as React from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import { financeService } from '../financeService';
 import { 
   Plus, 
@@ -15,7 +16,6 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { LoginPage } from './Login';
 
 export function ContactsPage() {
   const [contacts, setContacts] = useState<any[]>([]);
@@ -26,10 +26,10 @@ export function ContactsPage() {
   const [filterType, setFilterType] = useState<'ALL' | 'CLIENT' | 'SUPPLIER'>('ALL');
   
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
+  const { companyId } = useCompany();
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !companyId) return;
     setLoading(true);
     try {
       const data = await financeService.buscarContatos(companyId);
@@ -72,7 +72,6 @@ export function ContactsPage() {
   };
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
-  if (!user) return <LoginPage />;
 
   const filteredData = contacts.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 

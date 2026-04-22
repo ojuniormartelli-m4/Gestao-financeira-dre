@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as React from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import { financeService } from '../financeService';
 import { 
   Plus, 
@@ -13,7 +14,6 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { LoginPage } from './Login';
 
 export function PaymentMethodsPage() {
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
@@ -23,10 +23,10 @@ export function PaymentMethodsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
+  const { companyId } = useCompany();
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !companyId) return;
     setLoading(true);
     try {
       const data = await financeService.buscarFormasPagamento(companyId);
@@ -69,7 +69,6 @@ export function PaymentMethodsPage() {
   };
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
-  if (!user) return <LoginPage />;
 
   const filteredData = paymentMethods.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase())

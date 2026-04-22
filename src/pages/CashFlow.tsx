@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { financeService } from '../financeService';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import { useFilter } from '../contexts/FilterContext';
 import { motion } from 'motion/react';
 import { 
@@ -42,10 +43,10 @@ export function CashFlowPage() {
   const [realHistory, setRealHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { user, loading: authLoading } = useAuth();
-  const companyId = 'm4-digital';
+  const { companyId } = useCompany();
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !companyId) return;
     setLoading(true);
     try {
       const [banks, history, centers] = await Promise.all([
@@ -112,7 +113,6 @@ export function CashFlowPage() {
   }, [realHistory]);
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
-  if (!user) return <LoginPage />;
 
   return (
     <div className="space-y-8">

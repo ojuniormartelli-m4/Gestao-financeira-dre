@@ -34,19 +34,22 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [costCenters, setCostCenters] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
+  const { user } = useAuth();
   const [companyId, setCompanyIdState] = useState<string>(() => {
     const saved = localStorage.getItem('companyId');
-    if (saved && saved !== 'null') {
-      console.log(`[CompanyContext] ID detectado no storage: ${saved}`);
-      return saved;
-    }
-    console.log('[CompanyContext] ID ausente no storage, usando padrão m4-digital');
-    return 'm4-digital';
+    return saved && saved !== 'null' ? saved : '';
   });
-  const { user } = useAuth();
+
+  // Sincronizar companyId com o usuário logado
+  useEffect(() => {
+    if (user?.companyId) {
+      setCompanyIdState(user.companyId);
+      localStorage.setItem('companyId', user.companyId);
+    }
+  }, [user]);
 
   const setCompanyId = (id: string) => {
-    const validId = id && id !== 'null' ? id : 'm4-digital';
+    const validId = id && id !== 'null' ? id : '';
     setCompanyIdState(validId);
     localStorage.setItem('companyId', validId);
   };

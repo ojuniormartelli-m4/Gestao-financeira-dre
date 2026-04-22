@@ -108,7 +108,7 @@ export function SettingsPage() {
   const handleSeedAuth = async () => {
     setSeedLoading(true);
     try {
-      await seedAuthData();
+      await seedAuthData(companyId);
       alert('Cargos e usuário admin semeados com sucesso!');
       loadData();
     } catch (error) {
@@ -365,7 +365,6 @@ export function SettingsPage() {
   };
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
-  if (!user) return <LoginPage />;
 
   const groupedCategories = {
     REVENUE: categories.filter(c => c.type === 'REVENUE'),
