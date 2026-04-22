@@ -37,7 +37,7 @@ export function BalanceSheetPage() {
       
       // Calculate current statement for each card based on transactions
       const cardsWithBalance = (contextCreditCards || []).map(card => {
-        const cardTxs = (txs || []).filter(t => t.creditCardId === card.id);
+        const cardTxs = (txs || []).filter(t => t.creditCardId === card.id && t.status === 'PENDING');
         const currentStatement = cardTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
         return { ...card, current_statement: currentStatement };
       });

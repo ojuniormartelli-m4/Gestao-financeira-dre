@@ -38,6 +38,12 @@ export function CreditCardsPage() {
   
   // Transaction Modal State
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState({
+    accountId: '',
+    amount: 0,
+    datePayment: format(new Date(), 'yyyy-MM-dd')
+  });
   
   const [formData, setFormData] = useState({
     name: '',
@@ -78,6 +84,26 @@ export function CreditCardsPage() {
   }, [companyId]);
 
   const selectedCard = useMemo(() => cards.find(c => c.id === selectedCardId), [cards, selectedCardId]);
+
+  const nextClosingInfo = useMemo(() => {
+    if (!selectedCard) return null;
+    const now = new Date();
+    
+    // Próximo Fechamento
+    const closing = new Date(now.getFullYear(), now.getMonth(), selectedCard.closingDay);
+    if (now.getDate() > selectedCard.closingDay) {
+      closing.setMonth(closing.getMonth() + 1);
+    }
+    
+    // Vencimento correspondente
+    const due = new Date(closing);
+    due.setDate(selectedCard.dueDay);
+    if (selectedCard.dueDay <= selectedCard.closingDay) {
+        due.setMonth(due.getMonth() + 1);
+    }
+    
+    return { closing, due };
+  }, [selectedCard]);
 
   const [statementTransactions, setStatementTransactions] = useState<any[]>([]);
   const [loadingStatement, setLoadingStatement] = useState(false);
@@ -151,6 +177,43 @@ export function CreditCardsPage() {
       paid: statementTransactions.filter(t => t.status === 'PAID').reduce((s, t) => s + t.amount, 0)
     };
   }, [statementTransactions]);
+
+  const isInvoiceNearDue = useMemo(() => {
+    if (!nextClosingInfo || !selectedCard) return false;
+    const dueThisMonth = new Date(filterDate.getFullYear(), filterDate.getMonth(), selectedCard.dueDay);
+    const diff = (dueThisMonth.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= 5 && invoiceSummary.pending > 0;
+  }, [nextClosingInfo, selectedCard, filterDate, invoiceSummary.pending]);
+
+  const handlePayInvoice = async (data: any) => {
+    if (!companyId || !selectedCardId) return;
+    try {
+      setLoadingStatement(true);
+      const month = filterDate.getMonth() + 1;
+      const year = filterDate.getFullYear();
+      
+      await financeService.pagarFaturaCartao(
+        companyId,
+        selectedCardId,
+        month,
+        year,
+        data.accountId,
+        data.amount,
+        new Date(data.datePayment + 'T12:00:00')
+      );
+      
+      setIsPaymentModalOpen(false);
+      loadCards();
+      const updatedTxs = await financeService.buscarTransacoesPorCartao(companyId, selectedCardId, month, year);
+      setStatementTransactions(updatedTxs || []);
+      refreshData();
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao processar pagamento da fatura.');
+    } finally {
+      setLoadingStatement(false);
+    }
+  };
 
   return (
     <div className="h-[calc(100vh-140px)] flex gap-6 overflow-hidden">
@@ -248,21 +311,47 @@ export function CreditCardsPage() {
                   </div>
                 </div>
 
-                <div className="space-y-3 pt-4 border-t border-border">
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase text-text-secondary">
-                    <span>Limite Utilizado</span>
-                    <span>{selectedCard.limit > 0 ? Math.round((selectedCard.currentBalance / selectedCard.limit) * 100) : 0}%</span>
+                  <div className="space-y-3 pt-4 border-t border-border">
+                    {isInvoiceNearDue && (
+                      <div className="flex items-center gap-2 bg-warning/5 text-warning p-3 rounded-2xl text-[9px] font-black uppercase border border-warning/10 mb-2">
+                        <AlertCircle size={14} />
+                        Fatura vence em breve!
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase text-text-secondary">
+                      <span>Uso do Limite</span>
+                      <span>{selectedCard.limit > 0 ? Math.round((selectedCard.currentBalance / selectedCard.limit) * 100) : 0}%</span>
+                    </div>
+                    <div className="h-1.5 bg-bg rounded-full overflow-hidden">
+                      <div 
+                        className={cn(
+                          "h-full transition-all duration-500",
+                          (selectedCard.currentBalance / selectedCard.limit) > 0.8 ? "bg-danger" : "bg-accent"
+                        )}
+                        style={{ width: `${selectedCard.limit > 0 ? Math.min((selectedCard.currentBalance / selectedCard.limit) * 100, 100) : 0}%` }} 
+                      />
+                    </div>
+                    <div className="flex justify-between text-[9px] font-bold mt-1 text-text-secondary">
+                       <span>Comprometido: {formatCurrency(selectedCard.currentBalance)}</span>
+                       <span>Disp: {formatCurrency(selectedCard.limit - selectedCard.currentBalance)}</span>
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-bg rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-accent transition-all duration-500" 
-                      style={{ width: `${selectedCard.limit > 0 ? Math.min((selectedCard.currentBalance / selectedCard.limit) * 100, 100) : 0}%` }} 
-                    />
+
+                  <div className="grid grid-cols-2 gap-3 pt-4 border-t border-border">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-text-secondary">Próx. Fechamento</span>
+                      <div className="text-xs font-black text-text-primary">
+                        {nextClosingInfo ? format(nextClosingInfo.closing, 'dd/MM', { locale: ptBR }) : '--/--'}
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-right">
+                      <span className="text-[10px] font-bold uppercase text-text-secondary">Vencimento</span>
+                      <div className={cn("text-xs font-black", isInvoiceNearDue ? "text-warning" : "text-text-primary")}>
+                        {nextClosingInfo ? format(nextClosingInfo.due, 'dd/MM', { locale: ptBR }) : '--/--'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-[10px] font-bold mt-1">
-                     <span className="text-text-secondary">Utilizado: {formatCurrency(selectedCard.currentBalance)}</span>
-                  </div>
-                </div>
 
                 <div className="bg-bg/50 p-4 rounded-2xl space-y-3">
                   <div className="flex items-center gap-2 text-text-secondary">
@@ -280,13 +369,44 @@ export function CreditCardsPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-accent/5 border border-accent/10 rounded-3xl flex flex-col gap-3">
-                 <h4 className="text-[10px] font-black uppercase tracking-widest text-accent text-center">Ações</h4>
-                 <div className="grid grid-cols-2 gap-2">
-                    <button className="p-2.5 bg-surface border border-border rounded-xl text-[9px] font-black uppercase hover:bg-bg transition-colors">Fechar</button>
-                    <button className="p-2.5 bg-surface border border-border rounded-xl text-[9px] font-black uppercase hover:bg-bg transition-colors text-success">Pagar</button>
-                 </div>
-              </div>
+                <div className="p-4 bg-accent/5 border border-accent/10 rounded-3xl flex flex-col gap-3">
+                   <h4 className="text-[10px] font-black uppercase tracking-widest text-accent text-center">Ações</h4>
+                   <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => {
+                          setEditCard(selectedCard);
+                          setFormData({
+                            name: selectedCard.name,
+                            limit: String(selectedCard.limit),
+                            closingDay: String(selectedCard.closingDay),
+                            dueDay: String(selectedCard.dueDay),
+                            bankAccountId: selectedCard.bankAccountId
+                          });
+                          setIsModalOpen(true);
+                        }}
+                        className="p-2.5 bg-surface border border-border rounded-xl text-[9px] font-black uppercase hover:bg-bg transition-colors"
+                      >
+                        Configurar
+                      </button>
+                      <button 
+                        disabled={invoiceSummary.pending === 0}
+                        onClick={() => {
+                          setPaymentData({
+                            accountId: selectedCard.bankAccountId || bankAccounts[0]?.id || '',
+                            amount: invoiceSummary.pending,
+                            datePayment: format(new Date(), 'yyyy-MM-dd')
+                          });
+                          setIsPaymentModalOpen(true);
+                        }}
+                        className={cn(
+                          "p-2.5 bg-surface border border-border rounded-xl text-[9px] font-black uppercase hover:bg-bg transition-colors",
+                          invoiceSummary.pending > 0 ? "text-success border-success/30 bg-success/5" : "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        Pagar Fatura
+                      </button>
+                   </div>
+                </div>
             </div>
           )}
         </div>
@@ -605,6 +725,114 @@ export function CreditCardsPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Invoice Payment Modal */}
+      <PaymentModal 
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onConfirm={handlePayInvoice}
+        card={selectedCard}
+        totalAmount={paymentData.amount}
+        bankAccounts={bankAccounts}
+      />
+    </div>
+  );
+}
+
+function PaymentModal({ isOpen, onClose, onConfirm, card, totalAmount, bankAccounts }: any) {
+  const [accountId, setAccountId] = useState('');
+  const [amount, setAmount] = useState(0);
+  const [datePayment, setDatePayment] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setAccountId(card?.bankAccountId || bankAccounts[0]?.id || '');
+      setAmount(totalAmount);
+      setDatePayment(format(new Date(), 'yyyy-MM-dd'));
+    }
+  }, [isOpen, card, totalAmount, bankAccounts]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-bg/80 backdrop-blur-md" onClick={onClose} />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative w-full max-w-md bg-surface border border-border rounded-3xl shadow-2xl overflow-hidden"
+      >
+        <div className="p-6 border-b border-border flex justify-between items-center bg-bg/50">
+          <h2 className="text-xl font-bold">Pagar Fatura</h2>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl text-text-secondary transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="flex items-center gap-4 bg-accent/5 p-4 rounded-2xl border border-accent/10">
+            <div className="p-3 bg-accent/10 text-accent rounded-xl">
+              <CreditCardIcon size={24} />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-text-secondary uppercase">Cartão</div>
+              <div className="text-lg font-black">{card?.name}</div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Conta de Origem</label>
+              <select 
+                value={accountId}
+                onChange={e => setAccountId(e.target.value)}
+                className="w-full bg-bg border border-border rounded-2xl py-3.5 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none"
+              >
+                {bankAccounts.map((b: any) => (
+                  <option key={b.id} value={b.id}>{b.name} (Saldo: {formatCurrency(b.currentBalance)})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Valor</label>
+                <input 
+                  type="number"
+                  step="0.01"
+                  value={amount}
+                  onChange={e => setAmount(Number(e.target.value))}
+                  className="w-full bg-bg border border-border rounded-2xl py-3.5 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Data</label>
+                <input 
+                  type="date"
+                  value={datePayment}
+                  onChange={e => setDatePayment(e.target.value)}
+                  className="w-full bg-bg border border-border rounded-2xl py-3.5 px-4 text-sm focus:outline-none focus:border-accent transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 flex gap-3">
+            <button 
+              onClick={onClose}
+              className="flex-1 px-6 py-4 border border-border rounded-2xl font-bold text-text-secondary hover:bg-white/5 transition-all"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={() => onConfirm({ accountId, amount, datePayment })}
+              className="flex-1 bg-success text-bg px-6 py-4 rounded-2xl font-bold hover:opacity-90 transition-all shadow-xl shadow-success/20"
+            >
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

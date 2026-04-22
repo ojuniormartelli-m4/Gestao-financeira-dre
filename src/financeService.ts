@@ -1108,6 +1108,90 @@ export const financeService = {
       console.error('Supabase Error (excluirCartaoCredito):', error);
       throw error;
     }
+  },
+
+  async pagarFaturaCartao(companyId: string, cardId: string, month: number, year: number, accountId: string, amount: number, datePayment: Date) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      
+      // 1. Buscar info do cartão
+      const { data: card, error: cardError } = await supabase
+        .from('credit_cards')
+        .select('*')
+        .eq('id', cardId)
+        .single();
+      
+      if (cardError) throw cardError;
+
+      // 2. Tentar encontrar uma categoria adequada
+      const { data: categories } = await supabase
+        .from('chart_of_accounts')
+        .select('id, name')
+        .eq('company_id', normalizedCompanyId)
+        .eq('type', 'EXPENSE');
+      
+      const cardCategory = categories?.find(c => c.name.toLowerCase().includes('cartão') || c.name.toLowerCase().includes('fatura')) 
+                           || categories?.[0];
+
+      // 3. Registrar a saída na conta bancária
+      const bankTx = {
+        company_id: normalizedCompanyId,
+        description: `Pagamento Fatura ${card.name} - ${String(month).padStart(2, '0')}/${year}`,
+        amount: amount,
+        type: 'EXPENSE',
+        category_id: cardCategory?.id || '',
+        bank_account_id: accountId,
+        status: 'PAID',
+        date_competence: datePayment.toISOString(),
+        date_payment: datePayment.toISOString(),
+        is_conciliated: false
+      };
+
+      const { data: tx, error: txError } = await supabase
+        .from('transactions')
+        .insert([bankTx])
+        .select()
+        .single();
+
+      if (txError) throw txError;
+
+      // 4. Marcar todas as transações deste cartão no período como PAID
+      const startDate = new Date(year, month - 1, 1).toISOString();
+      const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update({ status: 'PAID' })
+        .eq('company_id', normalizedCompanyId)
+        .eq('credit_card_id', cardId)
+        .gte('date_competence', startDate)
+        .lte('date_competence', endDate)
+        .eq('status', 'PENDING');
+
+      if (updateError) throw updateError;
+
+      // 5. Atualizar saldo da conta bancária
+      const { data: bank } = await supabase
+        .from('bank_accounts')
+        .select('current_balance')
+        .eq('id', accountId)
+        .single();
+
+      if (bank) {
+        const currentBalance = bank.current_balance || 0;
+        const newBalance = Number(currentBalance) - amount;
+        
+        await supabase
+          .from('bank_accounts')
+          .update({ current_balance: newBalance })
+          .eq('id', accountId);
+      }
+
+      return tx.id;
+    } catch (error) {
+      console.error('Supabase Error (pagarFaturaCartao):', error);
+      throw error;
+    }
   }
 };
 
