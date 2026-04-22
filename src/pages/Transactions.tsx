@@ -659,7 +659,7 @@ export function TransactionsPage() {
       {/* FAB for Mobile or Quick Add */}
       <button 
         onClick={() => setIsModalOpen(true)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-success text-bg rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+        className="fixed bottom-8 right-24 w-14 h-14 bg-success text-bg rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
       >
         <Plus size={28} />
       </button>
@@ -1146,12 +1146,14 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
     dateCompetence: transaction?.dateCompetence ? format(transaction.dateCompetence, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
     datePayment: transaction?.datePayment ? format(transaction.datePayment, 'yyyy-MM-dd') : '',
     status: (transaction?.status || 'PENDING') as TransactionStatus,
-    bank_account_id: transaction?.bankAccountId || bankAccounts[0]?.id || ''
+    bank_account_id: transaction?.bankAccountId || bankAccounts[0]?.id || '',
+    installmentsTotal: 1
   });
   const [loading, setLoading] = React.useState(false);
   const [isEditMode, setIsEditMode] = React.useState(transaction ? (initialMode === 'edit') : true);
   const [isSubmittingLocked, setIsSubmittingLocked] = React.useState(false);
   const [isCreditCard, setIsCreditCard] = React.useState(!!transaction?.creditCardId);
+  const [isInstallment, setIsInstallment] = React.useState(false);
 
   React.useEffect(() => {
     if (isEditMode) {
@@ -1262,6 +1264,7 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
         contactId: formData.contact_id || undefined,
         paymentMethodId: formData.payment_method_id || undefined,
         creditCardId: formData.credit_card_id || undefined,
+        installmentsTotal: isInstallment ? formData.installmentsTotal : 1,
         companyId,
         isRecurring: false,
         userId: user?.id
@@ -1376,6 +1379,62 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
             </div>
           </div>
 
+          {!transaction && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Parcelado?</label>
+                <div className="flex bg-bg p-1 rounded-2xl border border-border">
+                  <button
+                    type="button"
+                    disabled={!isEditMode}
+                    onClick={() => {
+                      setIsInstallment(false);
+                      setFormData(prev => ({ ...prev, installmentsTotal: 1 }));
+                    }}
+                    className={cn(
+                      "flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all",
+                      !isInstallment ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
+                    )}
+                  >
+                    Não
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!isEditMode}
+                    onClick={() => setIsInstallment(true)}
+                    className={cn(
+                      "flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all",
+                      isInstallment ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
+                    )}
+                  >
+                    Sim
+                  </button>
+                </div>
+              </div>
+              {isInstallment ? (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-text-secondary uppercase ml-1">Nº de Parcelas</label>
+                  <input 
+                    type="number" 
+                    min="2"
+                    max="72"
+                    disabled={!isEditMode}
+                    value={formData.installmentsTotal}
+                    onChange={(e) => setFormData({ ...formData, installmentsTotal: Number(e.target.value) })}
+                    className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-70"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5 opacity-40 select-none">
+                  <label className="text-xs font-bold text-text-secondary uppercase ml-1 opacity-50">Nº de Parcelas</label>
+                  <div className="w-full bg-bg/50 border border-border rounded-2xl py-3 px-4 text-sm text-text-secondary">
+                    Pagamento Único
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Data Competência</label>
@@ -1389,82 +1448,63 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Status</label>
-              <select 
-                disabled={!isEditMode}
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
-              >
-                <option value="PENDING">Pendente</option>
-                <option value="PAID">{formData.type === 'REVENUE' ? 'Recebido' : 'Pago'}</option>
-              </select>
+              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Fonte do Pagamento</label>
+              <div className="flex bg-bg p-1 rounded-2xl border border-border">
+                <button
+                  type="button"
+                  disabled={!isEditMode || formData.type === 'REVENUE'}
+                  onClick={() => {
+                    setIsCreditCard(false);
+                    setFormData({ ...formData, credit_card_id: '' });
+                  }}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all",
+                    !isCreditCard ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
+                  )}
+                >
+                  Conta
+                </button>
+                <button
+                  type="button"
+                  disabled={!isEditMode || formData.type === 'REVENUE'}
+                  onClick={() => {
+                    setIsCreditCard(true);
+                    // For credit card expenses, status is effectively PAID (confirmed in statement)
+                    setFormData(prev => ({ ...prev, status: 'PAID' }));
+                  }}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all",
+                    isCreditCard ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
+                  )}
+                >
+                  Cartão
+                </button>
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Conta Bancária</label>
-              <select 
-                required
-                disabled={!isEditMode}
-                value={formData.bank_account_id}
-                onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
-              >
-                <option value="">Selecione...</option>
-                {bankAccounts.map((b: any) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Forma de Pagamento</label>
-              <select 
-                disabled={!isEditMode}
-                value={formData.payment_method_id}
-                onChange={(e) => setFormData({ ...formData, payment_method_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
-              >
-                <option value="">Opcional...</option>
-                {paymentMethods.map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {isCreditCard && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Escolha o Cartão</label>
-              <select 
-                required
-                disabled={!isEditMode}
-                value={formData.credit_card_id}
-                onChange={(e) => {
-                  const cardId = e.target.value;
-                  const card = creditCards.find((c: any) => c.id === cardId);
-                  setFormData({ 
-                    ...formData, 
-                    credit_card_id: cardId,
-                    bank_account_id: card ? card.bankAccountId : (formData.bank_account_id || bankAccounts[0]?.id || '')
-                  });
-                }}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
-              >
-                <option value="">Selecione o cartão...</option>
-                {creditCards.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            {!isCreditCard && (
+            {!isCreditCard ? (
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Pagar com Cartão?</label>
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Conta Bancária</label>
                 <select 
+                  required
+                  disabled={!isEditMode}
+                  value={formData.bank_account_id}
+                  onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
+                  className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+                >
+                  <option value="">Selecione...</option>
+                  {bankAccounts.map((b: any) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Cartão de Crédito</label>
+                <select 
+                  required
                   disabled={!isEditMode}
                   value={formData.credit_card_id}
                   onChange={(e) => {
@@ -1473,46 +1513,106 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
                     setFormData({ 
                       ...formData, 
                       credit_card_id: cardId,
-                      bank_account_id: card ? card.bankAccountId : (bankAccounts[0]?.id || '')
+                      bank_account_id: card ? card.bankAccountId : (formData.bank_account_id || bankAccounts[0]?.id || '')
                     });
                   }}
                   className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
                 >
-                  <option value="">Não (Usar Conta Corrente)</option>
+                  <option value="">Selecione o cartão...</option>
                   {creditCards.map((c: any) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
             )}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
-              <select 
-                disabled={!isEditMode}
-                value={formData.cost_center_id}
-                onChange={(e) => setFormData({ ...formData, cost_center_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
-              >
-                <option value="">Opcional...</option>
-                {costCenters.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-text-secondary uppercase ml-1">Contato (Cliente/Fornecedor)</label>
-              <select 
-                disabled={!isEditMode}
-                value={formData.contact_id}
-                onChange={(e) => setFormData({ ...formData, contact_id: e.target.value })}
-                className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
-              >
-                <option value="">Opcional...</option>
-                {contacts.filter((c: any) => formData.type === 'REVENUE' ? c.type === 'CLIENT' : c.type === 'SUPPLIER').map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+
+            {!isCreditCard ? (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Status</label>
+                <select 
+                  disabled={!isEditMode}
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
+                  className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+                >
+                  <option value="PENDING">Pendente</option>
+                  <option value="PAID">{formData.type === 'REVENUE' ? 'Recebido' : 'Pago'}</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1.5 opacity-60">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Status (Automático)</label>
+                <div className="w-full bg-bg/50 border border-border rounded-2xl py-3 px-4 text-sm text-text-secondary font-medium">
+                  Lançado na Fatura
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {!isCreditCard ? (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Forma de Pagamento</label>
+                <select 
+                  disabled={!isEditMode}
+                  value={formData.payment_method_id}
+                  onChange={(e) => setFormData({ ...formData, payment_method_id: e.target.value })}
+                  className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+                >
+                  <option value="">Opcional...</option>
+                  {paymentMethods.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
+                <select 
+                  disabled={!isEditMode}
+                  value={formData.cost_center_id}
+                  onChange={(e) => setFormData({ ...formData, cost_center_id: e.target.value })}
+                  className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+                >
+                  <option value="">Opcional...</option>
+                  {costCenters.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            
+            {!isCreditCard && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Centro de Custo</label>
+                <select 
+                  disabled={!isEditMode}
+                  value={formData.cost_center_id}
+                  onChange={(e) => setFormData({ ...formData, cost_center_id: e.target.value })}
+                  className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+                >
+                  <option value="">Opcional...</option>
+                  {costCenters.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-text-secondary uppercase ml-1">Contato (Cliente/Fornecedor)</label>
+            <select 
+              disabled={!isEditMode}
+              value={formData.contact_id}
+              onChange={(e) => setFormData({ ...formData, contact_id: e.target.value })}
+              className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors appearance-none disabled:opacity-70"
+            >
+              <option value="">Opcional...</option>
+              {contacts.filter((c: any) => formData.type === 'REVENUE' ? c.type === 'CLIENT' : c.type === 'SUPPLIER').map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
           </div>
 
           {(formData.status === 'PAID' || isCreditCard) && (

@@ -12,7 +12,8 @@ import {
   TrendingDown,
   TrendingUp,
   Landmark,
-  FileText
+  FileText,
+  CreditCard as CreditCardIcon
 } from 'lucide-react';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
@@ -23,19 +24,27 @@ export function ExtractTransactionsPage() {
   const { user, loading: authLoading } = useAuth();
   const { companyConfig } = useCompany();
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [selectedBankId, setSelectedBankId] = useState<string>('');
+  const [creditCards, setCreditCards] = useState<any[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [accountType, setAccountType] = useState<'BANK' | 'CARD'>('BANK');
   const [filterDate, setFilterDate] = useState(new Date());
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const companyId = 'm4-digital';
+  const { companyId } = useCompany();
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !companyId) return;
     try {
-      const banks = await financeService.buscarContasBancarias(companyId);
+      const [banks, cards] = await Promise.all([
+        financeService.buscarContasBancarias(companyId),
+        financeService.buscarCartoesCredito(companyId)
+      ]);
       setBankAccounts(banks || []);
-      if (banks?.length > 0 && !selectedBankId) {
-        setSelectedBankId(banks[0].id);
+      setCreditCards(cards || []);
+      
+      if (banks?.length > 0 && !selectedAccountId) {
+        setSelectedAccountId(banks[0].id);
+        setAccountType('BANK');
       }
     } catch (error) {
       console.error(error);
@@ -43,12 +52,18 @@ export function ExtractTransactionsPage() {
   };
 
   const loadTransactions = async () => {
-    if (!user || !selectedBankId) return;
+    if (!user || !selectedAccountId || !companyId) return;
     setLoading(true);
     try {
       const month = filterDate.getMonth() + 1;
       const year = filterDate.getFullYear();
-      const data = await financeService.buscarExtratoPorConta(companyId, selectedBankId, month, year);
+      
+      let data;
+      if (accountType === 'BANK') {
+        data = await financeService.buscarExtratoPorConta(companyId, selectedAccountId, month, year);
+      } else {
+        data = await financeService.buscarTransacoesPorCartao(companyId, selectedAccountId, month, year);
+      }
       setTransactions(data || []);
     } catch (error) {
       console.error(error);
@@ -58,22 +73,30 @@ export function ExtractTransactionsPage() {
   };
 
   useEffect(() => {
-    if (!authLoading && user) {
+    if (!authLoading && user && companyId) {
       loadData();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, companyId]);
 
   useEffect(() => {
-    if (selectedBankId && filterDate) {
+    if (selectedAccountId && filterDate) {
       loadTransactions();
     }
-  }, [selectedBankId, filterDate]);
+  }, [selectedAccountId, filterDate, accountType]);
 
-  const selectedBank = bankAccounts.find(b => b.id === selectedBankId);
+  const selectedAccount = accountType === 'BANK' 
+    ? bankAccounts.find(b => b.id === selectedAccountId)
+    : creditCards.find(c => c.id === selectedAccountId);
+
+  const handleAccountChange = (id: string) => {
+    const isCard = creditCards.some(c => c.id === id);
+    setSelectedAccountId(id);
+    setAccountType(isCard ? 'CARD' : 'BANK');
+  };
 
   // Cálculo de saldo acumulado
   const transactionsWithBalance = useMemo(() => {
-    let runningBalance = selectedBank?.initialBalance || 0;
+    let runningBalance = selectedAccount?.initialBalance || 0;
     
     // Simplificando: vamos mostrar apenas os saldos das transações carregadas
     // No mundo real, precisaríamos do saldo base antes do início do período.
@@ -82,7 +105,7 @@ export function ExtractTransactionsPage() {
       runningBalance += change;
       return { ...tx, runningBalance };
     });
-  }, [transactions, selectedBank]);
+  }, [transactions, selectedAccount]);
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin" /></div>;
   if (!user) return <LoginPage />;
@@ -110,15 +133,22 @@ export function ExtractTransactionsPage() {
         <div className="bg-surface p-4 rounded-2xl border border-border shadow-sm flex items-center gap-4">
           <div className="p-3 bg-accent/10 rounded-xl text-accent"><Wallet size={20} /></div>
           <div className="flex-1">
-            <label className="text-[10px] font-bold uppercase text-text-secondary block mb-1">Selecionar Conta</label>
+            <label className="text-[10px] font-bold uppercase text-text-secondary block mb-1">Selecionar Conta ou Cartão</label>
             <select 
-              value={selectedBankId}
-              onChange={e => setSelectedBankId(e.target.value)}
+              value={selectedAccountId}
+              onChange={e => handleAccountChange(e.target.value)}
               className="bg-transparent border-none text-sm font-bold focus:outline-none w-full appearance-none cursor-pointer"
             >
-              {bankAccounts.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+              <optgroup label="Contas Bancárias">
+                {bankAccounts.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Cartões de Crédito">
+                {creditCards.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
         </div>
@@ -137,10 +167,21 @@ export function ExtractTransactionsPage() {
         </div>
 
         <div className="bg-surface p-4 rounded-2xl border border-border shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-success/10 rounded-xl text-success"><TrendingUp size={20} /></div>
+          <div className="p-3 bg-success/10 rounded-xl text-success">
+            {accountType === 'BANK' ? <TrendingUp size={20} /> : <CreditCardIcon size={20} />}
+          </div>
           <div className="flex-1">
-            <label className="text-[10px] font-bold uppercase text-text-secondary block mb-1">Saldo Atual da Conta</label>
-            <div className="text-sm font-bold text-success">{formatCurrency(selectedBank?.currentBalance || 0)}</div>
+            <label className="text-[10px] font-bold uppercase text-text-secondary block mb-1">
+              {accountType === 'BANK' ? 'Saldo Atual' : 'Valor Total em Aberto'}
+            </label>
+            <div className={cn(
+              "text-sm font-bold",
+              accountType === 'BANK' ? "text-success" : "text-danger"
+            )}>
+              {accountType === 'BANK' 
+                ? formatCurrency(selectedAccount?.currentBalance || 0)
+                : formatCurrency(transactions.filter(t => t.status === 'PENDING').reduce((s, t) => s + t.amount, 0))}
+            </div>
           </div>
         </div>
       </div>
@@ -166,25 +207,31 @@ export function ExtractTransactionsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-bg/50 border-b border-border">
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Data Pagamento</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Data {accountType === 'BANK' ? 'Pagamento' : 'Compra'}</th>
                     <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Descrição</th>
                     <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Categoria</th>
                     <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary text-right">Valor</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary text-right pr-10">Saldo Acumulado</th>
+                    {accountType === 'BANK' && (
+                      <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary text-right pr-10">Saldo Acumulado</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
                   {transactionsWithBalance.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-20 text-center text-text-secondary italic">
-                        Nenhuma transação paga encontrada para este período nesta conta.
+                      <td colSpan={accountType === 'BANK' ? 5 : 4} className="px-6 py-20 text-center text-text-secondary italic">
+                        {accountType === 'BANK' 
+                          ? 'Nenhuma transação paga encontrada para este período nesta conta.'
+                          : 'Nenhuma compra encontrada para este cartão neste período.'}
                       </td>
                     </tr>
                   ) : (
                     transactionsWithBalance.map((tx, idx) => (
                       <tr key={tx.id} className="hover:bg-accent/5 transition-colors group">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-text-primary">{format(tx.datePayment, 'dd/MM/yyyy')}</div>
+                          <div className="text-sm font-medium text-text-primary">
+                            {format(new Date(accountType === 'BANK' ? tx.datePayment : tx.dateCompetence), 'dd/MM/yyyy')}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-text-primary font-bold">{tx.description}</div>
@@ -202,14 +249,16 @@ export function ExtractTransactionsPage() {
                             {tx.type === 'REVENUE' ? '+' : '-'} {formatCurrency(tx.amount)}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-right pr-10">
-                          <div className={cn(
-                            "text-sm font-black",
-                            tx.runningBalance >= 0 ? "text-text-primary" : "text-danger"
-                          )}>
-                            {formatCurrency(tx.runningBalance)}
-                          </div>
-                        </td>
+                        {accountType === 'BANK' && (
+                          <td className="px-6 py-4 text-right pr-10">
+                            <div className={cn(
+                              "text-sm font-black",
+                              tx.runningBalance >= 0 ? "text-text-primary" : "text-danger"
+                            )}>
+                              {formatCurrency(tx.runningBalance)}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))
                   )}

@@ -5,56 +5,55 @@ export const financeService = {
   async adicionarTransacao(companyId: string, data: Omit<Transaction, 'id' | 'createdAt'> & { userId?: string }) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
+      const installments = data.installmentsTotal || 1;
+      const amountPerInstallment = data.amount / installments;
       
-      // Criar objeto de inserção dinâmico para evitar erros se colunas opcionais não existirem no banco
-      const insertData: any = {
-        company_id: normalizedCompanyId,
-        description: data.description,
-        amount: data.amount,
-        type: data.type,
-        category_id: data.categoryId,
-        bank_account_id: data.bankAccountId,
-        status: data.status,
-        date_competence: data.dateCompetence.toISOString(),
-        date_payment: data.datePayment ? data.datePayment.toISOString() : null,
-        is_conciliated: false
-      };
-
-      // Só adiciona campos opcionais se eles tiverem valor
-      if (data.userId) insertData.user_id = data.userId;
-      if (data.costCenterId) insertData.cost_center_id = data.costCenterId;
-      if (data.contactId) insertData.contact_id = data.contactId;
-      if (data.paymentMethodId) insertData.payment_method_id = data.paymentMethodId;
-      if (data.creditCardId) insertData.credit_card_id = data.creditCardId;
-
-      let { data: insertedData, error } = await supabase
-        .from('transactions')
-        .insert([insertData])
-        .select()
-        .single();
-
-      // Fallback: Se falhar por causa do user_id (perfil inexistente), tentamos salvar sem vincular o usuário
-      if (error && error.code === '23503' && (error.message?.includes('user_id') || error.details?.includes('user_id'))) {
-        console.warn('[financeService] Vínculo de usuário falhou (perfil não encontrado). Tentando salvar sem user_id...');
-        const backupData = { ...insertData };
-        delete backupData.user_id;
+      const transactionsToInsert = [];
+      
+      for (let i = 0; i < installments; i++) {
+        const dateComp = new Date(data.dateCompetence);
+        dateComp.setMonth(dateComp.getMonth() + i);
         
-        const retry = await supabase
-          .from('transactions')
-          .insert([backupData])
-          .select()
-          .single();
+        const datePay = data.datePayment ? new Date(data.datePayment) : null;
+        if (datePay) {
+          datePay.setMonth(datePay.getMonth() + i);
+        }
+
+        const insertData: any = {
+          company_id: normalizedCompanyId,
+          description: installments > 1 ? `${data.description} (${i + 1}/${installments})` : data.description,
+          amount: installments > 1 ? amountPerInstallment : data.amount,
+          type: data.type,
+          category_id: data.categoryId,
+          bank_account_id: data.bankAccountId,
+          status: i === 0 ? data.status : 'PENDING',
+          date_competence: dateComp.toISOString(),
+          date_payment: datePay ? datePay.toISOString() : null,
+          is_conciliated: false,
+          installment_number: installments > 1 ? i + 1 : null,
+          installments_total: installments > 1 ? installments : null
+        };
+
+        if (data.userId) insertData.user_id = data.userId;
+        if (data.costCenterId) insertData.cost_center_id = data.costCenterId;
+        if (data.contactId) insertData.contact_id = data.contactId;
+        if (data.paymentMethodId) insertData.payment_method_id = data.paymentMethodId;
+        if (data.creditCardId) insertData.credit_card_id = data.creditCardId;
         
-        insertedData = retry.data;
-        error = retry.error;
+        transactionsToInsert.push(insertData);
       }
 
+      const { data: insertedData, error } = await supabase
+        .from('transactions')
+        .insert(transactionsToInsert)
+        .select();
+
       if (error) {
-        console.error('Erro detalhado do Supabase (Insert):', error);
+        console.error('Erro detalhado do Supabase (Insert Multi):', error);
         throw error;
       }
 
-      // Atualizar saldo da conta bancária se a transação estiver paga e não for cartão de crédito
+      // Atualizar saldo da conta bancária se a PRIMEIRA transação estiver paga e não for cartão de crédito
       if (data.status === 'PAID' && data.bankAccountId && !data.creditCardId) {
         const { data: bank, error: bankError } = await supabase
           .from('bank_accounts')
@@ -64,9 +63,10 @@ export const financeService = {
 
         if (bank && !bankError) {
           const currentBalance = bank.current_balance || 0;
+          // Subtrai/Soma apenas o valor da PRIMEIRA parcela (ou valor total se não parcelado)
           const newBalance = data.type === 'REVENUE' 
-            ? Number(currentBalance) + data.amount 
-            : Number(currentBalance) - data.amount;
+            ? Number(currentBalance) + amountPerInstallment 
+            : Number(currentBalance) - amountPerInstallment;
           
           await supabase
             .from('bank_accounts')
@@ -75,7 +75,7 @@ export const financeService = {
         }
       }
 
-      return insertedData.id;
+      return insertedData[0].id;
     } catch (error) {
       console.error('Supabase Error (adicionarTransacao):', error);
       throw error;
@@ -949,6 +949,7 @@ export const financeService = {
         .eq('company_id', normalizedCompanyId)
         .eq('bank_account_id', bankAccountId)
         .eq('status', 'PAID')
+        .is('credit_card_id', null) // No extrato bancário padrão, não mostramos compras de cartão (elas aparecem no faturamento do cartão)
         .gte('date_payment', startDate.toISOString())
         .lte('date_payment', endDate.toISOString())
         .order('date_payment', { ascending: true });
@@ -966,6 +967,40 @@ export const financeService = {
       }));
     } catch (error) {
       console.error('Supabase Error (buscarExtratoPorConta):', error);
+      throw error;
+    }
+  },
+
+  async buscarTransacoesPorCartao(companyId: string, creditCardId: string, month?: number, year?: number) {
+    try {
+      const normalizedCompanyId = String(companyId || '').trim();
+      let query = supabase
+        .from('transactions')
+        .select(`
+          *,
+          category:chart_of_accounts(name)
+        `)
+        .eq('company_id', normalizedCompanyId)
+        .eq('credit_card_id', creditCardId)
+        .order('date_competence', { ascending: false });
+
+      if (month && year) {
+        const startDate = new Date(year, month - 1, 1).toISOString();
+        const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+        query = query.gte('date_competence', startDate).lte('date_competence', endDate);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      return (data || []).map(tx => ({
+        ...tx,
+        categoryName: tx.category?.name || 'N/A',
+        dateCompetence: new Date(tx.date_competence),
+        datePayment: tx.date_payment ? new Date(tx.date_payment) : null
+      }));
+    } catch (error) {
+      console.error('Supabase Error (buscarTransacoesPorCartao):', error);
       throw error;
     }
   },
@@ -1031,17 +1066,29 @@ export const financeService = {
   async salvarCartaoCredito(companyId: string, data: any) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
-      const { error } = await supabase
-        .from('credit_cards')
-        .upsert({
-          company_id: normalizedCompanyId,
-          name: data.name,
-          credit_limit: data.limit,
-          closing_day: data.closingDay,
-          due_day: data.dueDay,
-          bank_account_id: data.bankAccountId
-        });
-      if (error) throw error;
+      const payload = {
+        company_id: normalizedCompanyId,
+        name: data.name,
+        credit_limit: Number(data.limit || 0),
+        closing_day: Number(data.closingDay),
+        due_day: Number(data.dueDay),
+        bank_account_id: data.bankAccountId || null
+      };
+
+      let result;
+      if (data.id) {
+        result = await supabase
+          .from('credit_cards')
+          .update(payload)
+          .eq('id', data.id)
+          .eq('company_id', normalizedCompanyId);
+      } else {
+        result = await supabase
+          .from('credit_cards')
+          .insert([payload]);
+      }
+
+      if (result.error) throw result.error;
     } catch (error) {
       console.error('Supabase Error (salvarCartaoCredito):', error);
       throw error;

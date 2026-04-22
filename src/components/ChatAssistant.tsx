@@ -4,9 +4,11 @@ import { MessageSquare, X, Send, Bot, User, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { aiService } from '../aiService';
 import { financeService } from '../financeService';
+import { useCompany } from '../contexts/CompanyContext';
 import { cn } from '../lib/utils';
 
 export function ChatAssistant() {
+  const { companyId } = useCompany();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{ role: 'user' | 'bot', text: string }[]>([
     { role: 'bot', text: 'Olá! Sou seu assistente financeiro. Como posso ajudar hoje?' }
@@ -14,7 +16,6 @@ export function ChatAssistant() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const companyId = 'm4-digital';
 
   useEffect(() => {
     if (scrollRef.current) {

@@ -100,6 +100,8 @@ export interface Transaction {
     suggestedCategory: string;
   };
   isConciliated?: boolean;
+  installmentNumber?: number;
+  installmentsTotal?: number;
   createdAt: Date;
 }
 

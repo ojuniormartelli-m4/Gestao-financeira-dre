@@ -16,9 +16,12 @@ function getAI() {
   return aiInstance;
 }
 
-async function callAI(prompt: string) {
+async function callAI(prompt: string, retryCount = 0): Promise<string | null> {
   const ai = getAI();
-  if (!ai) return null;
+  if (!ai) return "Inteligência Artificial não configurada.";
+
+  const MAX_RETRIES = 5;
+  const INITIAL_DELAY = 2000; // 2 segundos
 
   try {
     const response = await ai.models.generateContent({
@@ -26,8 +29,24 @@ async function callAI(prompt: string) {
       contents: prompt,
     });
     return response.text;
-  } catch (error) {
-    console.error("Erro na chamada da IA:", error);
+  } catch (error: any) {
+    const errorMsg = error?.message || "";
+    const isQuotaExceeded = errorMsg.includes("429") || error?.status === 429 || error?.code === 429 || errorMsg.includes("quota");
+
+    if (isQuotaExceeded && retryCount < MAX_RETRIES) {
+      const delay = INITIAL_DELAY * Math.pow(2, retryCount) + Math.random() * 1000;
+      console.warn(`[FinScale] Limite de cota atingido. Tentando novamente em ${Math.round(delay)}ms... (Tentativa ${retryCount + 1}/${MAX_RETRIES})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return callAI(prompt, retryCount + 1);
+    }
+
+    if (isQuotaExceeded) {
+      const msg = "Cota do Gemini excedida. Verifique seu plano ou aguarde um momento.";
+      console.error(`Erro na chamada da IA: ${msg}`);
+      return `ERRO_COTA: ${msg}`;
+    } else {
+      console.error("Erro na chamada da IA:", error);
+    }
     return null;
   }
 }
@@ -45,6 +64,7 @@ export const aiService = {
     `;
 
     const result = await callAI(prompt);
+    if (result?.startsWith("ERRO_COTA:")) return result.replace("ERRO_COTA: ", "");
     return result || "Não foi possível gerar a análise no momento.";
   },
 
@@ -58,6 +78,7 @@ export const aiService = {
     `;
 
     const result = await callAI(prompt);
+    if (result?.startsWith("ERRO_COTA:")) return result.replace("ERRO_COTA: ", "");
     return result || "Desculpe, tive um problema ao processar sua pergunta.";
   },
 
@@ -74,6 +95,7 @@ export const aiService = {
     `;
 
     const result = await callAI(prompt);
+    if (result?.startsWith("ERRO_COTA:")) return result.replace("ERRO_COTA: ", "");
     return result || "Não foi possível gerar a projeção no momento.";
   },
 
