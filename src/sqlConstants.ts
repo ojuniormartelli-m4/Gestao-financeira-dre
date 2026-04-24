@@ -287,7 +287,7 @@ BEGIN
 
     -- 2. Garantir perfil público vinculado sem deletar (evita erros de FK)
     INSERT INTO public.profiles (id, company_id, name, login, role_id, active)
-    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin', 'admin-role', true)
+    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin@finscale.internal', 'admin-role', true)
     ON CONFLICT (id) DO UPDATE SET 
       name = EXCLUDED.name,
       login = EXCLUDED.login,
@@ -521,7 +521,7 @@ BEGIN
     END IF;
 
     INSERT INTO public.profiles (id, company_id, name, login, role_id, active)
-    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin', 'admin-role', true)
+    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin@finscale.internal', 'admin-role', true)
     ON CONFLICT (id) DO UPDATE SET 
       name = EXCLUDED.name,
       login = EXCLUDED.login,
