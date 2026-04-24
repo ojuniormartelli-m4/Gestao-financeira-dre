@@ -26,6 +26,8 @@ import {
   Users,
   Landmark,
   ChevronLeft,
+  UserPlus,
+  Shield,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -62,11 +64,19 @@ const menuGroups = [
   {
     title: 'Cadastros',
     items: [
-      { icon: Tags, label: 'Categorias', path: '/configuracoes?tab=categorias' },
-      { icon: Target, label: 'Centro de Custos', path: '/centros-custo' },
-      { icon: Wallet, label: 'Contas', path: '/configuracoes?tab=contas' },
       { icon: Users, label: 'Contatos', path: '/contatos' },
-      { icon: Landmark, label: 'Formas de Pagamento', path: '/formas-pagamento' },
+    ]
+  },
+  {
+    title: 'Configuração',
+    items: [
+      { icon: Tags, label: 'Categorias', path: '/configuracoes?tab=categorias' },
+      { icon: Target, label: 'Centro de Custos', path: '/configuracoes?tab=centros-custo' },
+      { icon: Wallet, label: 'Contas', path: '/configuracoes?tab=contas' },
+      { icon: Landmark, label: 'Formas de Pagamento', path: '/configuracoes?tab=formas-pagamento' },
+      { icon: UserPlus, label: 'Usuários', path: '/configuracoes?tab=usuarios' },
+      { icon: Shield, label: 'Cargos', path: '/configuracoes?tab=cargos' },
+      { icon: Settings, label: 'Sistema', path: '/configuracoes?tab=sistema' },
     ]
   }
 ];
@@ -239,30 +249,6 @@ export function Sidebar() {
                 </div>
               </div>
             ))}
-
-            <div className="pt-4 mt-4 border-t border-border">
-              <NavLink
-                to="/configuracoes"
-                onClick={() => toggleMobile()}
-                className={({ isActive }) => cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group relative",
-                  isActive 
-                    ? "bg-accent/10 text-accent border border-accent/20" 
-                    : "text-text-secondary hover:bg-white/5 hover:text-text-primary",
-                  isCollapsed && "justify-center px-0"
-                )}
-              >
-                <Settings size={20} className="flex-shrink-0 group-hover:text-accent" />
-                {!isCollapsed && <span className="font-medium text-sm">Configurações</span>}
-                
-                {isCollapsed && (
-                  <div className="absolute left-full ml-3 px-3 py-2 bg-accent text-bg text-[10px] font-bold rounded-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none whitespace-nowrap z-[100] shadow-2xl border border-accent/20 translate-x-1 group-hover:translate-x-0">
-                    Configurações
-                    <div className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2 border-[6px] border-transparent border-r-accent" />
-                  </div>
-                )}
-              </NavLink>
-            </div>
           </nav>
 
           {/* Footer Area */}

@@ -24,7 +24,9 @@ import {
   X,
   Monitor,
   Sun,
-  Moon
+  Moon,
+  Database,
+  Copy
 } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -32,18 +34,21 @@ import { LoginPage } from './Login';
 import { supabase } from '../supabase';
 import { seedAuthData } from '../seedAuth';
 import { popularDadosTeste } from '../mockData';
+import { RESET_DATABASE_SQL, UPDATE_DATABASE_SQL } from '../sqlConstants';
 
 import { useTheme } from '../contexts/ThemeContext';
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const { companyId, setCompanyId } = useCompany();
+  const { companyId, setCompanyId, refreshData: refreshGlobalData } = useCompany();
   
   const getInitialTab = () => {
     switch (tabParam) {
       case 'categorias': return 'CATEGORIES';
       case 'contas': return 'BANKS';
+      case 'centros-custo': return 'COST_CENTERS';
+      case 'formas-pagamento': return 'PAYMENT_METHODS';
       case 'usuarios': return 'USERS';
       case 'cargos': return 'ROLES';
       case 'sistema': return 'SYSTEM';
@@ -51,7 +56,20 @@ export function SettingsPage() {
     }
   };
 
-  const [activeTab, setActiveTab] = useState<'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM'>(getInitialTab());
+  const [activeTab, setActiveTab] = useState<'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM' | 'COST_CENTERS' | 'PAYMENT_METHODS'>(getInitialTab());
+  const [copiedReset, setCopiedReset] = useState(false);
+  const [copiedUpdate, setCopiedUpdate] = useState(false);
+
+  const handleCopySql = (sql: string, type: 'reset' | 'update') => {
+    navigator.clipboard.writeText(sql);
+    if (type === 'reset') {
+      setCopiedReset(true);
+      setTimeout(() => setCopiedReset(false), 2000);
+    } else {
+      setCopiedUpdate(true);
+      setTimeout(() => setCopiedUpdate(false), 2000);
+    }
+  };
 
   // Sincronizar tab ao mudar URL
   useEffect(() => {
@@ -60,10 +78,12 @@ export function SettingsPage() {
     }
   }, [tabParam]);
 
-  const handleTabChange = (tab: 'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM') => {
+  const handleTabChange = (tab: 'CATEGORIES' | 'USERS' | 'ROLES' | 'BANKS' | 'SYSTEM' | 'COST_CENTERS' | 'PAYMENT_METHODS') => {
     setActiveTab(tab);
     const param = tab === 'CATEGORIES' ? 'categorias' : 
                   tab === 'BANKS' ? 'contas' : 
+                  tab === 'COST_CENTERS' ? 'centros-custo' :
+                  tab === 'PAYMENT_METHODS' ? 'formas-pagamento' :
                   tab === 'USERS' ? 'usuarios' : 
                   tab === 'ROLES' ? 'cargos' : 'sistema';
     setSearchParams({ tab: param });
@@ -73,6 +93,8 @@ export function SettingsPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [costCenters, setCostCenters] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [companyConfig, setCompanyConfig] = useState<any>({ name: '', logoUrl: '' });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -93,6 +115,12 @@ export function SettingsPage() {
 
   const [isAddingBank, setIsAddingBank] = useState(false);
   const [newBank, setNewBank] = useState({ name: '', type: 'CHECKING', initialBalance: 0 });
+
+  const [isAddingCostCenter, setIsAddingCostCenter] = useState(false);
+  const [newCostCenter, setNewCostCenter] = useState({ name: '', color: '#22c55e' });
+
+  const [isAddingPaymentMethod, setIsAddingPaymentMethod] = useState(false);
+  const [newPaymentMethod, setNewPaymentMethod] = useState({ name: '' });
 
   const [selectedBankForStatement, setSelectedBankForStatement] = useState<any>(null);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
@@ -148,11 +176,13 @@ export function SettingsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const [cats, usersRes, rolesRes, banks] = await Promise.all([
+      const [cats, usersRes, rolesRes, banks, costs, payments] = await Promise.all([
         financeService.buscarPlanoDeContas(companyId),
         supabase.from('profiles').select('*'),
         supabase.from('roles').select('*'),
-        financeService.buscarContasBancarias(companyId)
+        financeService.buscarContasBancarias(companyId),
+        financeService.buscarCentrosCusto(companyId),
+        financeService.buscarFormasPagamento(companyId)
       ]);
       
       setCategories(cats || []);
@@ -167,6 +197,8 @@ export function SettingsPage() {
       })) || []);
       setRoles(rolesRes.data || []);
       setBankAccounts(banks || []);
+      setCostCenters(costs || []);
+      setPaymentMethods(payments || []);
       
       // Initialize local state with global config
       setCompanyConfig(globalCompanyConfig);
@@ -333,8 +365,36 @@ export function SettingsPage() {
     }
   };
 
+  const handleAddCostCenter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCostCenter.name) return;
+    try {
+      await financeService.salvarCentroCusto(companyId, { ...newCostCenter, companyId });
+      setNewCostCenter({ name: '', color: '#22c55e' });
+      setIsAddingCostCenter(false);
+      loadData();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleAddPaymentMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPaymentMethod.name) return;
+    try {
+      await financeService.salvarFormaPagamento(companyId, { ...newPaymentMethod, companyId });
+      setNewPaymentMethod({ name: '' });
+      setIsAddingPaymentMethod(false);
+      loadData();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const handleDelete = async (collectionName: string, id: string) => {
-    if (!confirm('Tem certeza?')) return;
+    if (!confirm('Tem certeza que deseja excluir este item?')) return;
+    
+    console.log(`[Delete] Iniciando exclusão de ${collectionName}: ${id}`);
     try {
       if (collectionName === 'usuarios') {
         const [txs, tfsFrom, tfsTo] = await Promise.all([
@@ -350,18 +410,33 @@ export function SettingsPage() {
         
         const { error } = await supabase.from('profiles').delete().eq('id', id);
         if (error) throw error;
-      } else if (collectionName === 'categories') {
+      } else if (collectionName === 'categories' || collectionName === 'CATEGORIES') {
         await financeService.excluirCategoria(companyId, id);
-      } else if (collectionName === 'bankAccounts') {
+      } else if (collectionName === 'bankAccounts' || collectionName === 'BANKS') {
         await financeService.excluirContaBancaria(companyId, id);
+      } else if (collectionName === 'costCenters' || collectionName === 'COST_CENTERS') {
+        await financeService.excluirCentroCusto(id);
+      } else if (collectionName === 'paymentMethods' || collectionName === 'PAYMENT_METHODS') {
+        await financeService.excluirFormaPagamento(id);
       } else if (collectionName === 'roles') {
         const { error } = await supabase.from('roles').delete().eq('id', id);
         if (error) throw error;
       }
-      loadData();
-    } catch (error) {
-      console.error(error);
-      alert('Erro ao excluir item.');
+      
+      console.log(`[Delete] Sucesso ao excluir ${collectionName}`);
+      
+      // Atualiza estado local
+      await loadData();
+      
+      // Atualiza estado global
+      if (refreshGlobalData) {
+        await refreshGlobalData();
+      }
+      
+      alert('Item excluído com sucesso!');
+    } catch (error: any) {
+      console.error('[Delete] Erro ao excluir:', error);
+      alert('Erro ao excluir item. Verifique se existem transações ou dados vinculados a este registro.');
     }
   };
 
@@ -406,9 +481,11 @@ export function SettingsPage() {
         </div>
       </header>
 
-      <div className="flex gap-2 p-1 bg-surface border border-border rounded-2xl w-fit">
+      <div className="flex gap-2 p-1 bg-surface border border-border rounded-2xl w-fit overflow-x-auto no-scrollbar max-w-full">
         <TabButton active={activeTab === 'CATEGORIES'} onClick={() => handleTabChange('CATEGORIES')} icon={<Tag size={16} />} label="Categorias" />
         <TabButton active={activeTab === 'BANKS'} onClick={() => handleTabChange('BANKS')} icon={<Building2 size={16} />} label="Bancos" />
+        <TabButton active={activeTab === 'COST_CENTERS'} onClick={() => handleTabChange('COST_CENTERS')} icon={<Target size={16} />} label="Centros de Custo" />
+        <TabButton active={activeTab === 'PAYMENT_METHODS'} onClick={() => handleTabChange('PAYMENT_METHODS')} icon={<Landmark size={16} />} label="Pagamento" />
         <TabButton active={activeTab === 'USERS'} onClick={() => handleTabChange('USERS')} icon={<Users size={16} />} label="Usuários" />
         <TabButton active={activeTab === 'ROLES'} onClick={() => handleTabChange('ROLES')} icon={<Shield size={16} />} label="Cargos" />
         <TabButton active={activeTab === 'SYSTEM'} onClick={() => handleTabChange('SYSTEM')} icon={<Monitor size={16} />} label="Sistema" />
@@ -489,8 +566,81 @@ export function SettingsPage() {
                     >
                       <History size={16} />
                     </button>
-                    <button onClick={() => handleDelete('bankAccounts', b.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDelete('BANKS', b.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
                   </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'COST_CENTERS' && (
+          <div className="bg-surface rounded-3xl border border-border p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-lg flex items-center gap-2">Centros de Custo</h3>
+              <button onClick={() => setIsAddingCostCenter(true)} className="flex items-center gap-2 text-accent font-bold text-sm"><Plus size={16} /> Novo Centro</button>
+            </div>
+
+            <AnimatePresence>
+              {isAddingCostCenter && (
+                <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddCostCenter} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label="Nome" value={newCostCenter.name} onChange={(v: string) => setNewCostCenter({...newCostCenter, name: v})} placeholder="Ex: Administrativo" />
+                    <Input label="Cor (Hex)" value={newCostCenter.color} onChange={(v: string) => setNewCostCenter({...newCostCenter, color: v})} type="color" className="h-10" />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setIsAddingCostCenter(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>
+                    <button type="submit" className="px-4 py-2 bg-accent text-bg rounded-xl text-sm font-bold">Salvar Centro</button>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {costCenters.map(cc => (
+                <div key={cc.id} className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-bg font-bold" style={{ backgroundColor: cc.color || '#22c55e' }}>
+                      {cc.name.charAt(0)}
+                    </div>
+                    <span className="text-sm font-bold">{cc.name}</span>
+                  </div>
+                  <button onClick={() => handleDelete('COST_CENTERS', cc.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'PAYMENT_METHODS' && (
+          <div className="bg-surface rounded-3xl border border-border p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-lg flex items-center gap-2">Formas de Pagamento</h3>
+              <button onClick={() => setIsAddingPaymentMethod(true)} className="flex items-center gap-2 text-accent font-bold text-sm"><Plus size={16} /> Nova Forma</button>
+            </div>
+
+            <AnimatePresence>
+              {isAddingPaymentMethod && (
+                <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddPaymentMethod} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
+                  <div className="max-w-md">
+                    <Input label="Nome" value={newPaymentMethod.name} onChange={(v: string) => setNewPaymentMethod({...newPaymentMethod, name: v})} placeholder="Ex: Pix" />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setIsAddingPaymentMethod(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>
+                    <button type="submit" className="px-4 py-2 bg-accent text-bg rounded-xl text-sm font-bold">Salvar Forma</button>
+                  </div>
+                </motion.form>
+              )}
+            </AnimatePresence>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {paymentMethods.map(pm => (
+                <div key={pm.id} className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center text-accent"><Landmark size={16} /></div>
+                    <span className="text-sm font-bold">{pm.name}</span>
+                  </div>
+                  <button onClick={() => handleDelete('PAYMENT_METHODS', pm.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
@@ -765,6 +915,64 @@ export function SettingsPage() {
                   <button onClick={handleSeedFinance} disabled={seedLoading} className="w-full py-2 bg-surface border border-border rounded-xl text-xs font-bold hover:border-accent transition-all flex items-center justify-center gap-2 disabled:opacity-50">
                     <RefreshCw size={14} className={cn(seedLoading && "animate-spin")} /> Gerar Dados
                   </button>
+                </div>
+              </div>
+            </div>
+
+            {/* SQL INFRASTRUCTURE SECTION */}
+            <div className="pt-8 border-t border-border">
+              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <Database className="text-accent" size={20} />
+                Infraestrutura do Banco de Dados
+              </h3>
+              
+              <div className="space-y-6">
+                {/* UPDATE SQL */}
+                <div className="p-6 bg-accent/5 border border-accent/10 rounded-3xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-accent">
+                      <RefreshCw size={18} />
+                      <h4 className="font-bold text-sm">Scripts de Atualização (Seguro)</h4>
+                    </div>
+                    <button 
+                      onClick={() => handleCopySql(UPDATE_DATABASE_SQL, 'update')}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-bold hover:border-accent transition-all"
+                    >
+                      {copiedUpdate ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
+                      {copiedUpdate ? 'Copiado!' : 'Copiar Update SQL'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    Use este script para garantir que todas as tabelas e colunas novas existam no seu banco de dados. 
+                    <strong> Não apaga dados existentes.</strong>
+                  </p>
+                  <pre className="p-4 bg-black/40 border border-border rounded-xl text-[10px] font-mono text-text-secondary h-32 overflow-y-auto">
+                    {UPDATE_DATABASE_SQL}
+                  </pre>
+                </div>
+
+                {/* RESET SQL */}
+                <div className="p-6 bg-danger/5 border border-danger/10 rounded-3xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-danger">
+                      <AlertCircle size={18} />
+                      <h4 className="font-bold text-sm">Reset Total do Sistema (PERIGO)</h4>
+                    </div>
+                    <button 
+                      onClick={() => handleCopySql(RESET_DATABASE_SQL, 'reset')}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-bold hover:border-danger text-danger transition-all opacity-80 hover:opacity-100"
+                    >
+                      {copiedReset ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                      {copiedReset ? 'Copiado!' : 'Copiar Reset SQL'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    Este script apaga <strong>TODAS AS TABELAS</strong> e inicia o banco do zero com os dados padrão (m4-digital).
+                    Use apenas se desejar recomeçar o sistema do zero.
+                  </p>
+                  <pre className="p-4 bg-black/40 border border-border rounded-xl text-[10px] font-mono text-text-secondary h-32 overflow-y-auto">
+                    {RESET_DATABASE_SQL}
+                  </pre>
                 </div>
               </div>
             </div>
