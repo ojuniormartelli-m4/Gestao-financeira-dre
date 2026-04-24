@@ -62,6 +62,17 @@ export function SettingsPage() {
   const [copiedReset, setCopiedReset] = useState(false);
   const [copiedUpdate, setCopiedUpdate] = useState(false);
 
+  // Mapeamento de grupos DRE para Português
+  const dreGroupLabels: Record<string, string> = {
+    'GROSS_REVENUE': 'Receita Bruta',
+    'OPERATING_REVENUE': 'Receita Operacional',
+    'VARIABLE_COST': 'Custo Variável',
+    'FIXED_COST': 'Despesa Fixa',
+    'TAX': 'Impostos',
+    'NON_OPERATING': 'Não Operacional',
+    'INVESTMENT': 'Investimentos'
+  };
+
   const handleCopySql = (sql: string, type: 'reset' | 'update') => {
     navigator.clipboard.writeText(sql);
     if (type === 'reset') {
@@ -105,6 +116,7 @@ export function SettingsPage() {
   const [seedLoading, setSeedLoading] = useState(false);
   
   const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<any>(null);
   const [newCategory, setNewCategory] = useState({ name: '', type: 'EXPENSE', dreGroup: 'FIXED_COST' });
   
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -116,12 +128,15 @@ export function SettingsPage() {
   const [newRole, setNewRole] = useState({ name: '' });
 
   const [isAddingBank, setIsAddingBank] = useState(false);
+  const [editingBank, setEditingBank] = useState<any>(null);
   const [newBank, setNewBank] = useState({ name: '', type: 'CHECKING', initialBalance: 0 });
 
   const [isAddingCostCenter, setIsAddingCostCenter] = useState(false);
+  const [editingCostCenter, setEditingCostCenter] = useState<any>(null);
   const [newCostCenter, setNewCostCenter] = useState({ name: '', color: '#22c55e' });
 
   const [isAddingPaymentMethod, setIsAddingPaymentMethod] = useState(false);
+  const [editingPaymentMethod, setEditingPaymentMethod] = useState<any>(null);
   const [newPaymentMethod, setNewPaymentMethod] = useState({ name: '' });
 
   const [selectedBankForStatement, setSelectedBankForStatement] = useState<any>(null);
@@ -518,8 +533,18 @@ export function SettingsPage() {
             </AnimatePresence>
 
             <div className="space-y-8">
-              <CategoryGroup title="Receitas" categories={categories.filter(c => c.type === 'REVENUE')} onDelete={id => handleDelete('categories', id)} />
-              <CategoryGroup title="Despesas" categories={categories.filter(c => c.type === 'EXPENSE')} onDelete={id => handleDelete('categories', id)} />
+              <CategoryGroup 
+                title="Receitas" 
+                categories={categories.filter(c => c.type === 'REVENUE')} 
+                onEdit={cat => setEditingCategory(cat)}
+                dreLabels={dreGroupLabels}
+              />
+              <CategoryGroup 
+                title="Despesas" 
+                categories={categories.filter(c => c.type === 'EXPENSE')} 
+                onEdit={cat => setEditingCategory(cat)}
+                dreLabels={dreGroupLabels}
+              />
             </div>
           </div>
         )}
@@ -549,7 +574,11 @@ export function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {bankAccounts.map(b => (
-                <div key={b.id} className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group">
+                <div 
+                  key={b.id} 
+                  onClick={() => setEditingBank(b)}
+                  className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent transition-all"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center text-accent"><Building2 size={20} /></div>
                     <div>
@@ -559,7 +588,8 @@ export function SettingsPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setSelectedBankForStatement(b);
                         setIsStatementModalOpen(true);
                       }}
@@ -568,7 +598,6 @@ export function SettingsPage() {
                     >
                       <History size={16} />
                     </button>
-                    <button onClick={() => handleDelete('BANKS', b.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
                   </div>
                 </div>
               ))}
@@ -600,14 +629,17 @@ export function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {costCenters.map(cc => (
-                <div key={cc.id} className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group">
+                <div 
+                  key={cc.id} 
+                  onClick={() => setEditingCostCenter(cc)}
+                  className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent transition-all"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center text-bg font-bold" style={{ backgroundColor: cc.color || '#22c55e' }}>
                       {cc.name.charAt(0)}
                     </div>
                     <span className="text-sm font-bold">{cc.name}</span>
                   </div>
-                  <button onClick={() => handleDelete('COST_CENTERS', cc.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
@@ -637,12 +669,15 @@ export function SettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {paymentMethods.map(pm => (
-                <div key={pm.id} className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group">
+                <div 
+                  key={pm.id} 
+                  onClick={() => setEditingPaymentMethod(pm)}
+                  className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent transition-all"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center text-accent"><Landmark size={16} /></div>
                     <span className="text-sm font-bold">{pm.name}</span>
                   </div>
-                  <button onClick={() => handleDelete('PAYMENT_METHODS', pm.id)} className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
@@ -1030,6 +1065,84 @@ export function SettingsPage() {
           onClose={() => setIsStatementModalOpen(false)} 
         />
       )}
+
+      {editingCategory && (
+        <EntityEditModal
+          title="Editar Categoria"
+          item={editingCategory}
+          onClose={() => setEditingCategory(null)}
+          onSave={async (data) => {
+            await financeService.salvarCategoria(companyId, { ...data, id: editingCategory.id, companyId });
+            loadData();
+          }}
+          onDelete={async () => {
+            await handleDelete('CATEGORIES', editingCategory.id);
+          }}
+          fields={[
+            { key: 'name', label: 'Nome', type: 'text' },
+            { key: 'type', label: 'Tipo', type: 'select', options: [{v:'REVENUE', l:'Receita'}, {v:'EXPENSE', l:'Despesa'}] },
+            { key: 'dreGroup', label: 'Grupo DRE', type: 'select', options: Object.entries(dreGroupLabels).map(([v, l]) => ({v, l})) }
+          ]}
+        />
+      )}
+
+      {editingBank && (
+        <EntityEditModal
+          title="Editar Conta Bancária"
+          item={editingBank}
+          onClose={() => setEditingBank(null)}
+          onSave={async (data) => {
+            await financeService.salvarContaBancaria(companyId, { ...data, id: editingBank.id, companyId });
+            loadData();
+          }}
+          onDelete={async () => {
+            await handleDelete('BANKS', editingBank.id);
+          }}
+          fields={[
+            { key: 'name', label: 'Nome', type: 'text' },
+            { key: 'bankName', label: 'Banco', type: 'text' },
+            { key: 'type', label: 'Tipo', type: 'select', options: [{v:'CHECKING', l:'Corrente'}, {v:'SAVINGS', l:'Poupança'}, {v:'INVESTMENT', l:'Investimento'}, {v:'CASH', l:'Caixa'}] },
+            { key: 'initialBalance', label: 'Saldo Inicial', type: 'number' }
+          ]}
+        />
+      )}
+
+      {editingCostCenter && (
+        <EntityEditModal
+          title="Editar Centro de Custo"
+          item={editingCostCenter}
+          onClose={() => setEditingCostCenter(null)}
+          onSave={async (data) => {
+            await financeService.salvarCentroCusto(companyId, { ...data, id: editingCostCenter.id, companyId });
+            loadData();
+          }}
+          onDelete={async () => {
+            await handleDelete('COST_CENTERS', editingCostCenter.id);
+          }}
+          fields={[
+            { key: 'name', label: 'Nome', type: 'text' },
+            { key: 'color', label: 'Cor (Hex)', type: 'color' }
+          ]}
+        />
+      )}
+
+      {editingPaymentMethod && (
+        <EntityEditModal
+          title="Editar Forma de Pagamento"
+          item={editingPaymentMethod}
+          onClose={() => setEditingPaymentMethod(null)}
+          onSave={async (data) => {
+            await financeService.salvarFormaPagamento(companyId, { ...data, id: editingPaymentMethod.id, companyId });
+            loadData();
+          }}
+          onDelete={async () => {
+            await handleDelete('PAYMENT_METHODS', editingPaymentMethod.id);
+          }}
+          fields={[
+            { key: 'name', label: 'Nome', type: 'text' }
+          ]}
+        />
+      )}
     </div>
   );
 }
@@ -1042,20 +1155,38 @@ function TabButton({ active, onClick, icon, label }: any) {
   );
 }
 
-function Input({ label, value, onChange, type = 'text', placeholder }: any) {
+function Input({ label, value, onChange, type = 'text', placeholder, disabled }: any) {
   return (
     <div className="space-y-1">
       <label className="text-[10px] font-bold uppercase text-text-secondary ml-1">{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:border-accent outline-none" />
+      <input 
+        type={type} 
+        value={value} 
+        onChange={e => onChange(e.target.value)} 
+        placeholder={placeholder} 
+        disabled={disabled}
+        className={cn(
+          "w-full bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:border-accent outline-none transition-all",
+          disabled && "opacity-60 cursor-not-allowed bg-bg/50"
+        )} 
+      />
     </div>
   );
 }
 
-function Select({ label, value, onChange, options }: any) {
+function Select({ label, value, onChange, options, disabled }: any) {
   return (
     <div className="space-y-1">
       <label className="text-[10px] font-bold uppercase text-text-secondary ml-1">{label}</label>
-      <select value={value} onChange={e => onChange(e.target.value)} className="w-full bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:border-accent outline-none">
+      <select 
+        value={value} 
+        onChange={e => onChange(e.target.value)} 
+        disabled={disabled}
+        className={cn(
+          "w-full bg-surface border border-border rounded-xl px-4 py-2 text-sm focus:border-accent outline-none transition-all",
+          disabled && "opacity-60 cursor-not-allowed bg-bg/50"
+        )}
+      >
         <option value="">Selecione...</option>
         {options.map((o: any) => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
@@ -1063,26 +1194,151 @@ function Select({ label, value, onChange, options }: any) {
   );
 }
 
-function CategoryGroup({ title, categories, onDelete }: { title: string, categories: ChartOfAccount[], onDelete: (id: string) => void }) {
+function CategoryGroup({ title, categories, onEdit, dreLabels }: { title: string, categories: ChartOfAccount[], onEdit: (cat: any) => void, dreLabels: Record<string, string> }) {
   return (
     <div className="space-y-3">
       <h4 className="text-xs font-bold uppercase tracking-widest text-text-secondary border-b border-border pb-2">{title}</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {categories.map(cat => (
-          <div key={cat.id} className="flex items-center justify-between p-3 bg-bg/50 rounded-xl border border-border group hover:border-accent/30 transition-all">
+          <div 
+            key={cat.id} 
+            onClick={() => onEdit(cat)}
+            className="flex items-center justify-between p-4 bg-bg/50 rounded-xl border border-border group hover:border-accent transition-all cursor-pointer"
+          >
             <div className="flex flex-col">
-              <span className="text-sm font-medium">{cat.name}</span>
-              <span className="text-[10px] text-text-secondary uppercase">{cat.dreGroup}</span>
+              <span className="text-sm font-bold text-text-primary">{cat.name}</span>
+              <span className="text-[10px] text-text-secondary uppercase tracking-wider mt-0.5">
+                {dreLabels[cat.dreGroup] || cat.dreGroup}
+              </span>
             </div>
-            <button 
-              onClick={() => onDelete(cat.id)}
-              className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"
-            >
-              <Trash2 size={16} />
-            </button>
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function EntityEditModal({ title, item, onClose, onSave, onDelete, fields }: any) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({ ...item });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await onSave(formData);
+      onClose();
+    } catch (error) {
+      alert('Erro ao salvar.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteClick = async () => {
+    setLoading(true);
+    try {
+      await onDelete();
+      onClose();
+    } catch (error) {
+      // Erro já tratado no handleDelete global
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-bg/80 backdrop-blur-md" onClick={onClose} />
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative w-full max-w-md bg-surface border border-border rounded-3xl shadow-2xl overflow-hidden"
+      >
+        <div className="p-6 border-b border-border flex justify-between items-center bg-bg/50">
+          <h2 className="text-xl font-bold text-text-primary">{title}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-xl text-text-secondary transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div className="space-y-4">
+            {fields.map((f: any) => (
+              <div key={f.key}>
+                {f.type === 'select' ? (
+                  <Select 
+                    label={f.label} 
+                    value={formData[f.key]} 
+                    onChange={(v: any) => setFormData({ ...formData, [f.key]: v })}
+                    options={f.options}
+                    disabled={!isEditing}
+                  />
+                ) : (
+                  <Input 
+                    label={f.label} 
+                    type={f.type}
+                    value={formData[f.key]} 
+                    onChange={(v: any) => setFormData({ ...formData, [f.key]: v })}
+                    disabled={!isEditing}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-6 border-t border-border flex flex-col gap-3">
+            {!isEditing ? (
+              <div className="flex gap-3">
+                <button 
+                  type="button" 
+                  onClick={onClose}
+                  className="flex-1 py-3 bg-surface border border-border rounded-2xl font-bold text-text-secondary hover:bg-bg transition-all"
+                >
+                  Fechar
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setIsEditing(true)}
+                  className="flex-[2] py-3 bg-accent text-bg rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg shadow-accent/20"
+                >
+                  Iniciar Edição
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsEditing(false)}
+                    className="flex-1 py-3 bg-surface border border-border rounded-2xl font-bold text-text-secondary hover:bg-bg transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={loading}
+                    className="flex-[2] py-3 bg-accent text-bg rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg shadow-accent/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {loading && <RefreshCw size={18} className="animate-spin" />}
+                    Salvar Alterações
+                  </button>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={handleDeleteClick}
+                  disabled={loading}
+                  className="w-full py-3 bg-danger/10 text-danger border border-danger/20 rounded-2xl font-bold hover:bg-danger hover:text-white transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Trash2 size={18} />
+                  Excluir Item
+                </button>
+              </>
+            )}
+          </div>
+        </form>
+      </motion.div>
     </div>
   );
 }

@@ -102,6 +102,7 @@ export interface Transaction {
   isConciliated?: boolean;
   installmentNumber?: number;
   installmentsTotal?: number;
+  groupId?: string;
   createdAt: Date;
 }
 

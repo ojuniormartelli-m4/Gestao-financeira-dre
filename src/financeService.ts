@@ -104,6 +104,9 @@ export const financeService = {
       if (data.paymentMethodId !== undefined) updateData.payment_method_id = data.paymentMethodId;
       if (data.creditCardId !== undefined) updateData.credit_card_id = data.creditCardId;
       if (data.status !== undefined) updateData.status = data.status;
+      if (data.installmentNumber !== undefined) updateData.installment_number = data.installmentNumber;
+      if (data.installmentsTotal !== undefined) updateData.installments_total = data.installmentsTotal;
+      if (data.groupId !== undefined) updateData.group_id = data.groupId;
       if (data.dateCompetence) updateData.date_competence = data.dateCompetence.toISOString();
       if (data.datePayment) updateData.date_payment = data.datePayment.toISOString();
       else if (data.status === 'PAID' && !oldTx.date_payment) updateData.date_payment = new Date().toISOString();
@@ -242,7 +245,9 @@ export const financeService = {
         dateCompetence: new Date(tx.date_competence),
         datePayment: tx.date_payment ? new Date(tx.date_payment) : undefined,
         createdAt: new Date(tx.created_at),
-        isConciliated: tx.is_conciliated
+        isConciliated: tx.is_conciliated,
+        installmentNumber: tx.installment_number,
+        installmentsTotal: tx.installments_total
       })) as Transaction[];
     } catch (error) {
       console.error('Supabase Error (buscarTransacoes):', error);
@@ -272,26 +277,37 @@ export const financeService = {
     }
   },
 
-  async adicionarCategoria(companyId: string, categoria: Omit<ChartOfAccount, 'id'>) {
+  async salvarCategoria(companyId: string, categoria: any) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
-      const { data, error } = await supabase
-        .from('chart_of_accounts')
-        .insert([{
-          company_id: normalizedCompanyId,
-          name: categoria.name,
-          type: categoria.type,
-          dre_group: categoria.dreGroup
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data.id;
+      const payload: any = {
+        company_id: normalizedCompanyId,
+        name: categoria.name,
+        type: categoria.type,
+        dre_group: categoria.dreGroup
+      };
+      
+      if (categoria.id) {
+        const { error } = await supabase
+          .from('chart_of_accounts')
+          .update(payload)
+          .eq('id', categoria.id)
+          .eq('company_id', normalizedCompanyId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('chart_of_accounts')
+          .insert([payload]);
+        if (error) throw error;
+      }
     } catch (error) {
-      console.error('Supabase Error (adicionarCategoria):', error);
+      console.error('Supabase Error (salvarCategoria):', error);
       throw error;
     }
+  },
+
+  async adicionarCategoria(companyId: string, categoria: Omit<ChartOfAccount, 'id'>) {
+    return this.salvarCategoria(companyId, categoria);
   },
 
   async excluirCategoria(companyId: string, categoryId: string) {
@@ -340,29 +356,40 @@ export const financeService = {
     }
   },
 
-  async adicionarContaBancaria(companyId: string, data: any) {
+  async salvarContaBancaria(companyId: string, data: any) {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
-      const { data: insertedData, error } = await supabase
-        .from('bank_accounts')
-        .insert([{
-          company_id: normalizedCompanyId,
-          name: data.name,
-          bank_name: data.bankName,
-          type: data.type,
-          initial_balance: Number(data.initialBalance),
-          current_balance: Number(data.initialBalance),
-          color: data.color
-        }])
-        .select()
-        .single();
+      const payload: any = {
+        company_id: normalizedCompanyId,
+        name: data.name,
+        bank_name: data.bankName,
+        type: data.type,
+        initial_balance: Number(data.initialBalance || 0),
+        color: data.color
+      };
 
-      if (error) throw error;
-      return insertedData.id;
+      if (data.id) {
+        const { error } = await supabase
+          .from('bank_accounts')
+          .update(payload)
+          .eq('id', data.id)
+          .eq('company_id', normalizedCompanyId);
+        if (error) throw error;
+      } else {
+        payload.current_balance = payload.initial_balance;
+        const { error } = await supabase
+          .from('bank_accounts')
+          .insert([payload]);
+        if (error) throw error;
+      }
     } catch (error) {
-      console.error('Supabase Error (adicionarContaBancaria):', error);
+      console.error('Supabase Error (salvarContaBancaria):', error);
       throw error;
     }
+  },
+
+  async adicionarContaBancaria(companyId: string, data: any) {
+    return this.salvarContaBancaria(companyId, data);
   },
 
   async excluirContaBancaria(companyId: string, accountId: string) {
@@ -445,7 +472,9 @@ export const financeService = {
         dateCompetence: new Date(tx.date_competence),
         datePayment: tx.date_payment ? new Date(tx.date_payment) : undefined,
         createdAt: new Date(tx.created_at),
-        isConciliated: tx.is_conciliated
+        isConciliated: tx.is_conciliated,
+        installmentNumber: tx.installment_number,
+        installmentsTotal: tx.installments_total
       })) as Transaction[];
     } catch (error) {
       console.error('Supabase Error (buscarTodasTransacoes):', error);

@@ -118,6 +118,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   payment_method_id TEXT REFERENCES payment_methods(id) ON DELETE SET NULL,
   credit_card_id TEXT REFERENCES credit_cards(id) ON DELETE SET NULL,
   status TEXT CHECK (status IN ('PAID', 'PENDING', 'CANCELLED', 'SCHEDULED', 'CONCILIATED')),
+  installment_number INTEGER,
+  installments_total INTEGER,
+  group_id TEXT,
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
   user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
@@ -393,12 +396,24 @@ CREATE TABLE IF NOT EXISTS transactions (
   payment_method_id TEXT REFERENCES payment_methods(id) ON DELETE SET NULL,
   credit_card_id TEXT REFERENCES credit_cards(id) ON DELETE SET NULL,
   status TEXT CHECK (status IN ('PAID', 'PENDING', 'CANCELLED', 'SCHEDULED', 'CONCILIATED')),
+  installment_number INTEGER,
+  installments_total INTEGER,
+  group_id TEXT,
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
   user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   is_conciliated BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Garantir colunas novas no UPDATE
+DO $$ 
+BEGIN 
+    BEGIN ALTER TABLE transactions ADD COLUMN installment_number INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN installments_total INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN group_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN is_conciliated BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END;
+END $$;
 
 CREATE TABLE IF NOT EXISTS transfers (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
