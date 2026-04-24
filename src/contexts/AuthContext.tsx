@@ -88,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     try {
+      console.log(`[FinScale] Tentando login para: ${username}`);
       // Mapeia usuário básico para e-mail virtual interno se não for um e-mail real
       const email = username.includes('@') ? username.trim() : `${username.trim().toLowerCase()}@finscale.internal`;
 
@@ -97,26 +98,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        console.error("[FinScale] Erro Supabase Auth:", error.message, error.status);
         return { success: false, message: 'Login ou senha incorretos.' };
       }
 
       if (data.user) {
+        console.log("[FinScale] Auth sucesso, carregando perfil...");
         await loadProfile(data.user.id);
-        
-        // Wait briefly for the state to update if needed
         return { success: true };
       }
 
       return { success: false, message: 'Usuário não encontrado.' };
     } catch (error) {
-      console.error("Erro no login:", error);
+      console.error("[FinScale] Erro inesperado no login:", error);
       return { success: false, message: 'Erro ao processar login.' };
     }
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const logout = () => {
+    console.log("[FinScale] Iniciando logout forçado...");
+    
+    // Limpeza síncrona imediata
     setUser(null);
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Logout assíncrono em segundo plano (não esperamos por ele)
+    supabase.auth.signOut().catch(e => console.warn("[FinScale] SignOut error:", e));
+    
+    // Redirecionamento físico forçado
+    console.log("[FinScale] Redirecionando para login...");
+    window.location.href = '/login';
   };
 
   return (

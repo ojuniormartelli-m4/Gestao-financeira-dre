@@ -78,16 +78,24 @@ export default function App() {
 
   // Se as variáveis de ambiente não estiverem configuradas OU as tabelas estiverem faltando OU forçado pelo usuário
   if (!isSupabaseSetup || isTableMissing || isForcingSetup) {
-    return <InfrastructureSetupPage onComplete={() => {
-      setIsSupabaseSetup(true);
-      setIsTableMissing(false);
-      setIsForcingSetup(false);
-      // Limpar a URL para remover o force_setup=true
-      if (window.location.search.includes('force_setup=true')) {
-        window.history.replaceState({}, '', window.location.pathname);
-      }
-      checkSystemStatus();
-    }} />;
+    return <InfrastructureSetupPage 
+      onBack={() => {
+        setIsForcingSetup(false);
+        if (window.location.search.includes('force_setup=true')) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }}
+      onComplete={() => {
+        setIsSupabaseSetup(true);
+        setIsTableMissing(false);
+        setIsForcingSetup(false);
+        // Limpar a URL para remover o force_setup=true
+        if (window.location.search.includes('force_setup=true')) {
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        checkSystemStatus();
+      }} 
+    />;
   }
 
   if (isSystemEmpty === null) {

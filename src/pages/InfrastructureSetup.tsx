@@ -1,25 +1,29 @@
 import React, { useState } from 'react';
-import { Database, CheckCircle2, Copy, AlertCircle, RefreshCw, Server, ShieldCheck } from 'lucide-react';
+import { Database, CheckCircle2, Copy, AlertCircle, RefreshCw, Server, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { cn } from '../lib/utils';
 import { isConfigured, supabase } from '../supabase';
-import { RESET_DATABASE_SQL } from '../sqlConstants';
-
-const REQUIRED_SQL = RESET_DATABASE_SQL;
+import { RESET_DATABASE_SQL, UPDATE_DATABASE_SQL } from '../sqlConstants';
 
 interface Props {
   onComplete: () => void;
+  onBack?: () => void;
 }
 
-export function InfrastructureSetupPage({ onComplete }: Props) {
+export function InfrastructureSetupPage({ onComplete, onBack }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'RESET' | 'UPDATE' | null>(null);
+  const [scriptType, setScriptType] = useState<'UPDATE' | 'RESET'>('UPDATE');
   const configured = isConfigured();
 
-  const handleCopySql = () => {
-    navigator.clipboard.writeText(REQUIRED_SQL);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopySql = (type: 'UPDATE' | 'RESET') => {
+    const sql = type === 'UPDATE' ? UPDATE_DATABASE_SQL : RESET_DATABASE_SQL;
+    navigator.clipboard.writeText(sql);
+    setCopied(type);
+    setTimeout(() => setCopied(null), 2000);
   };
+
+  const currentSql = scriptType === 'UPDATE' ? UPDATE_DATABASE_SQL : RESET_DATABASE_SQL;
 
   const handleFinalize = async () => {
     setLoading(true);
@@ -86,7 +90,16 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
   return (
     <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center p-6 text-white text-center font-sans">
       <div className="w-full max-w-2xl bg-[#111114] border border-[#27272a] rounded-[2rem] p-8 md:p-12 shadow-2xl space-y-8">
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center relative">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="absolute left-0 top-0 p-2 hover:bg-white/5 rounded-xl text-gray-400 transition-colors"
+              title="Voltar"
+            >
+              <ChevronLeft size={24} />
+            </button>
+          )}
           <div className="w-16 h-16 bg-sky-500/10 rounded-2xl flex items-center justify-center text-sky-500 mb-6">
             <Database size={32} />
           </div>
@@ -107,20 +120,45 @@ export function InfrastructureSetupPage({ onComplete }: Props) {
               <ShieldCheck size={24} />
               <h3 className="font-bold">Script SQL de Estrutura</h3>
             </div>
+            <div className="flex bg-black/40 p-1 rounded-xl mb-4">
+              <button 
+                onClick={() => setScriptType('UPDATE')}
+                className={cn(
+                  "flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                  scriptType === 'UPDATE' ? "bg-[#1c1c1f] text-sky-400 shadow-lg" : "text-gray-500 hover:text-gray-400"
+                )}
+              >
+                Atualizar Estrutura
+              </button>
+              <button 
+                onClick={() => setScriptType('RESET')}
+                className={cn(
+                  "flex-1 py-2 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all",
+                  scriptType === 'RESET' ? "bg-red-500/10 text-red-500 shadow-lg" : "text-gray-500 hover:text-gray-400"
+                )}
+              >
+                Resetar Banco
+              </button>
+            </div>
+
             <p className="text-sm text-gray-400 leading-relaxed">
-              Copie o código abaixo e execute no <strong>SQL Editor</strong> do seu painel Supabase para criar as tabelas e permissões necessárias.
+              {scriptType === 'UPDATE' 
+                ? "Recomendado para corrigir erros de login ou adicionar novas colunas sem apagar seus dados." 
+                : "ATENÇÃO: Apaga todos os dados e recria o banco do zero."}
+              <br />
+              Copie o código abaixo e execute no <strong>SQL Editor</strong> do painel Supabase.
             </p>
             
             <div className="relative group">
               <pre className="bg-black/60 border border-[#27272a] rounded-2xl p-4 text-[10px] font-mono text-gray-500 h-44 overflow-y-auto">
-                {REQUIRED_SQL}
+                {currentSql}
               </pre>
               <button 
-                onClick={handleCopySql} 
+                onClick={() => handleCopySql(scriptType)} 
                 className="absolute top-2 right-2 px-3 py-1.5 bg-[#1c1c1f] border border-[#27272a] rounded-lg text-sky-400 hover:border-sky-500 transition-all flex items-center gap-2 text-[10px] font-bold"
               >
-                {copied ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-                {copied ? 'Copiado!' : 'Copiar Script'}
+                {copied === scriptType ? <CheckCircle2 size={12} /> : <Copy size={12} />}
+                {copied === scriptType ? 'Copiado!' : 'Copiar Script'}
               </button>
             </div>
           </div>
