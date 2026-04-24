@@ -63,6 +63,7 @@ export function TransactionsPage() {
   
   const initialStatus = (searchParams.get('status') as TransactionStatus | 'ALL') || 'ALL';
   const [filterStatus, setFilterStatus] = useState<TransactionStatus | 'ALL'>(initialStatus);
+  const [movementType, setMovementType] = useState<'ALL' | 'REVENUE' | 'EXPENSE'>('ALL');
   
   const [filterType, setFilterType] = useState<'TODAY' | 'MONTH' | 'YEAR' | 'CUSTOM'>('MONTH');
   const [filterDate, setFilterDate] = useState(new Date());
@@ -221,7 +222,8 @@ export function TransactionsPage() {
 
   const filteredTransactions = transactions.filter(t => {
     const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    const matchesType = movementType === 'ALL' || t.type === movementType;
+    return matchesSearch && matchesType;
   });
 
   // Group transactions by day
@@ -444,33 +446,71 @@ export function TransactionsPage() {
       {/* Main Content Areas */}
       <main className="flex-1 flex flex-col gap-6 min-w-0 h-full overflow-hidden">
         {/* Top bar with filters and actions */}
-        <div className="bg-surface rounded-2xl border border-border px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
-          <div className="flex items-center gap-6">
-            <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">Filtrar</span>
-            <div className="flex gap-3">
-              {[
-                { id: 'PENDING', label: 'Pendentes', color: 'bg-amber-400' },
-                { id: 'SCHEDULED', label: 'Agendados', color: 'bg-blue-400' },
-                { id: 'PAID', label: 'Confirmados', color: 'bg-success' },
-                { id: 'CONCILIATED', label: 'Conciliados', color: 'bg-accent' }
-              ].map(f => (
-                <button 
-                  key={f.id}
-                  onClick={() => updateStatusFilter(f.id === filterStatus ? 'ALL' : f.id as any)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase hover:bg-bg transition-colors border border-transparent",
-                    filterStatus === f.id && "bg-bg border-border"
-                  )}
-                >
-                  <div className={cn("w-2 h-2 rounded-full", f.color)} />
-                  {f.label}
-                </button>
-              ))}
+        <div className="bg-surface rounded-2xl border border-border px-4 py-3 flex flex-col gap-4 shadow-sm shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">Tipo</span>
+              <div className="flex gap-2">
+                {[
+                  { id: 'ALL', label: 'Ambos' },
+                  { id: 'REVENUE', label: 'Apenas Entradas' },
+                  { id: 'EXPENSE', label: 'Apenas Saídas' }
+                ].map(t => (
+                  <button 
+                    key={t.id}
+                    onClick={() => setMovementType(t.id as any)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-full text-[10px] font-bold uppercase transition-all border",
+                      movementType === t.id 
+                        ? "bg-accent text-bg border-accent shadow-lg shadow-accent/20" 
+                        : "bg-bg text-text-secondary border-border hover:border-accent/40"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={16} />
+                <input 
+                  type="text" 
+                  placeholder="Pesquisar..." 
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-4 py-2 bg-bg border border-border rounded-xl text-xs font-medium focus:outline-none focus:border-accent w-48"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Action Buttons */}
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <div className="flex items-center gap-6">
+              <span className="text-xs font-bold text-text-secondary uppercase tracking-widest">Status</span>
+              <div className="flex gap-3">
+                {[
+                  { id: 'PENDING', label: 'Pendentes', color: 'bg-amber-400' },
+                  { id: 'SCHEDULED', label: 'Agendados', color: 'bg-blue-400' },
+                  { id: 'PAID', label: 'Confirmados', color: 'bg-success' },
+                  { id: 'CONCILIATED', label: 'Conciliados', color: 'bg-accent' }
+                ].map(f => (
+                  <button 
+                    key={f.id}
+                    onClick={() => updateStatusFilter(f.id === filterStatus ? 'ALL' : f.id as any)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase hover:bg-bg transition-colors border border-transparent",
+                      filterStatus === f.id && "bg-bg border-border"
+                    )}
+                  >
+                    <div className={cn("w-2 h-2 rounded-full", f.color)} />
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center gap-1 bg-bg p-1 rounded-xl border border-border">
               <button onClick={() => {
                 setEditingTransaction(null);
@@ -488,17 +528,6 @@ export function TransactionsPage() {
               <button className="p-2 hover:bg-white/5 rounded-lg text-text-secondary">
                 <RefreshCw size={18} />
               </button>
-            </div>
-            
-            <div className="relative ml-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={16} />
-              <input 
-                type="text" 
-                placeholder="Pesquisar..." 
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-bg border border-border rounded-xl text-xs font-medium focus:outline-none focus:border-accent w-48"
-              />
             </div>
           </div>
         </div>

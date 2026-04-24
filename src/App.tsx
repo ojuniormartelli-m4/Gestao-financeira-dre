@@ -11,9 +11,7 @@ import { TransactionsPage } from './pages/Transactions';
 import { DREPage } from './pages/DRE';
 import { SettingsPage } from './pages/Settings';
 import { CashFlowPage } from './pages/CashFlow';
-import { CostCentersPage } from './pages/CostCenters';
 import { ContactsPage } from './pages/Contacts';
-import { PaymentMethodsPage } from './pages/PaymentMethods';
 import { ExtractTransactionsPage } from './pages/ExtractTransactions';
 import { BalanceSheetPage } from './pages/BalanceSheet';
 import { CreditCardsPage } from './pages/CreditCards';
@@ -34,8 +32,9 @@ export default function App() {
   const [isSupabaseSetup, setIsSupabaseSetup] = React.useState<boolean>(isConfigured());
   const [isTableMissing, setIsTableMissing] = React.useState<boolean>(false);
   const [isSystemEmpty, setIsSystemEmpty] = React.useState<boolean | null>(null);
+  const [isForcingSetup, setIsForcingSetup] = React.useState<boolean>(window.location.search.includes('force_setup=true'));
 
-  console.log('[FinScale] App State:', { isSupabaseSetup, isTableMissing, isSystemEmpty });
+  console.log('[FinScale] App State:', { isSupabaseSetup, isTableMissing, isSystemEmpty, isForcingSetup });
 
   const checkSystemStatus = React.useCallback(async () => {
     if (!isSupabaseSetup) return;
@@ -77,11 +76,16 @@ export default function App() {
     checkSystemStatus();
   }, [checkSystemStatus]);
 
-  // Se as variáveis de ambiente não estiverem configuradas OU as tabelas estiverem faltando
-  if (!isSupabaseSetup || isTableMissing) {
+  // Se as variáveis de ambiente não estiverem configuradas OU as tabelas estiverem faltando OU forçado pelo usuário
+  if (!isSupabaseSetup || isTableMissing || isForcingSetup) {
     return <InfrastructureSetupPage onComplete={() => {
       setIsSupabaseSetup(true);
       setIsTableMissing(false);
+      setIsForcingSetup(false);
+      // Limpar a URL para remover o force_setup=true
+      if (window.location.search.includes('force_setup=true')) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
       checkSystemStatus();
     }} />;
   }
@@ -125,9 +129,7 @@ export default function App() {
                       <Route path="transacoes" element={<TransactionsPage />} />
                       <Route path="dre" element={<DREPage />} />
                       <Route path="dfc" element={<CashFlowPage />} />
-                      <Route path="centros-custo" element={<CostCentersPage />} />
                       <Route path="contatos" element={<ContactsPage />} />
-                      <Route path="formas-pagamento" element={<PaymentMethodsPage />} />
                       <Route path="extrato" element={<ExtractTransactionsPage />} />
                       <Route path="balanco" element={<BalanceSheetPage />} />
                       <Route path="cartoes" element={<CreditCardsPage />} />

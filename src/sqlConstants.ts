@@ -254,6 +254,48 @@ ON CONFLICT DO NOTHING;
 INSERT INTO bank_accounts (company_id, name, bank_name, type, initial_balance, current_balance, color) VALUES
   ('${APP_COMPANY_ID}', 'Caixa Principal', 'M4 Digital', 'CASH', 0, 0, '#22c55e')
 ON CONFLICT DO NOTHING;
+
+-- 17.7 Usuário Administrador Inicial (Login: admin / Senha: admin123)
+-- Inserção no schema auth (usuário do sistema)
+-- Usamos um bloco anônimo para garantir que o usuário exista e tenha a senha correta
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'admin@finscale.internal') THEN
+        INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role)
+        VALUES (
+          '00000000-0000-0000-0000-000000000000',
+          '00000000-0000-0000-0000-000000000000',
+          'admin@finscale.internal',
+          crypt('admin123', gen_salt('bf')),
+          now(),
+          '{"provider":"email","providers":["email"]}',
+          '{"name":"Administrador"}',
+          now(),
+          now(),
+          'authenticated',
+          'authenticated'
+        );
+    ELSE
+        -- Se o usuário já existe, força a atualização da senha para 'admin123'
+        UPDATE auth.users 
+        SET encrypted_password = crypt('admin123', gen_salt('bf')),
+            updated_at = now()
+        WHERE email = 'admin@finscale.internal';
+    END IF;
+END $$;
+
+-- Vinculação ao perfil público (schema public)
+-- Primeiro removemos se houver conflito de ID ou login para garantir a criação limpa
+DELETE FROM public.profiles WHERE login = 'admin';
+INSERT INTO public.profiles (id, company_id, name, login, role_id, active)
+SELECT id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin', 'admin-role', true
+FROM auth.users WHERE email = 'admin@finscale.internal'
+ON CONFLICT (id) DO UPDATE SET 
+  company_id = EXCLUDED.company_id,
+  name = EXCLUDED.name,
+  login = EXCLUDED.login,
+  role_id = EXCLUDED.role_id,
+  active = EXCLUDED.active;
 `;
 
 export const UPDATE_DATABASE_SQL = `-- UPDATE SQL (Apenas Atualizações, Sem Apagar Dados)
@@ -450,4 +492,42 @@ INSERT INTO payment_methods (company_id, name, active) VALUES
   ('${APP_COMPANY_ID}', 'Boleto Bancário', true),
   ('${APP_COMPANY_ID}', 'Transferência Bancária (TED/DOC)', true)
 ON CONFLICT DO NOTHING;
+
+-- Garantir Usuário Administrador Inicial
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'admin@finscale.internal') THEN
+        INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, aud, role)
+        VALUES (
+          '00000000-0000-0000-0000-000000000000',
+          '00000000-0000-0000-0000-000000000000',
+          'admin@finscale.internal',
+          crypt('admin123', gen_salt('bf')),
+          now(),
+          '{"provider":"email","providers":["email"]}',
+          '{"name":"Administrador"}',
+          now(),
+          now(),
+          'authenticated',
+          'authenticated'
+        );
+    ELSE
+        -- Se o usuário já existe, força a atualização da senha para 'admin123'
+        UPDATE auth.users 
+        SET encrypted_password = crypt('admin123', gen_salt('bf')),
+            updated_at = now()
+        WHERE email = 'admin@finscale.internal';
+    END IF;
+END $$;
+
+DELETE FROM public.profiles WHERE login = 'admin';
+INSERT INTO public.profiles (id, company_id, name, login, role_id, active)
+SELECT id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin', 'admin-role', true
+FROM auth.users WHERE email = 'admin@finscale.internal'
+ON CONFLICT (id) DO UPDATE SET 
+  company_id = EXCLUDED.company_id,
+  name = EXCLUDED.name,
+  login = EXCLUDED.login,
+  role_id = EXCLUDED.role_id,
+  active = EXCLUDED.active;
 `;

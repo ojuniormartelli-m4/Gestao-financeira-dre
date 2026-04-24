@@ -17,6 +17,8 @@ import {
   Shield,
   UserPlus,
   Building2,
+  Landmark,
+  Target,
   FileText,
   Download,
   History,

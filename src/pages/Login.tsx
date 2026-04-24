@@ -103,6 +103,14 @@ export function LoginPage() {
             >
               {loading ? <RefreshCw className="animate-spin" size={20} /> : "Entrar no Sistema"}
             </button>
+
+            <button 
+              type="button"
+              onClick={() => window.location.search = '?force_setup=true'}
+              className="w-full bg-surface border border-border text-text-secondary font-bold py-3 rounded-2xl hover:bg-bg transition-all flex items-center justify-center gap-2 text-sm mt-4"
+            >
+              <RefreshCw size={16} /> Configurar Banco de Dados
+            </button>
           </form>
 
           <div className="mt-8 pt-6 border-t border-border text-center">

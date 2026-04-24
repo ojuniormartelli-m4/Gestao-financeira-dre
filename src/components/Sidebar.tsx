@@ -21,10 +21,12 @@ import {
   CheckCircle2,
   Library,
   CreditCard,
-  Tags,
+  Tag,
   Target,
   Users,
   Landmark,
+  Building2,
+  Monitor,
   ChevronLeft,
   UserPlus,
   Shield,
@@ -70,13 +72,13 @@ const menuGroups = [
   {
     title: 'Configuração',
     items: [
-      { icon: Tags, label: 'Categorias', path: '/configuracoes?tab=categorias' },
-      { icon: Target, label: 'Centro de Custos', path: '/configuracoes?tab=centros-custo' },
-      { icon: Wallet, label: 'Contas', path: '/configuracoes?tab=contas' },
-      { icon: Landmark, label: 'Formas de Pagamento', path: '/configuracoes?tab=formas-pagamento' },
-      { icon: UserPlus, label: 'Usuários', path: '/configuracoes?tab=usuarios' },
+      { icon: Tag, label: 'Categorias', path: '/configuracoes?tab=categorias' },
+      { icon: Building2, label: 'Bancos', path: '/configuracoes?tab=contas' },
+      { icon: Target, label: 'Centros de Custo', path: '/configuracoes?tab=centros-custo' },
+      { icon: Landmark, label: 'Pagamento', path: '/configuracoes?tab=formas-pagamento' },
+      { icon: Users, label: 'Usuários', path: '/configuracoes?tab=usuarios' },
       { icon: Shield, label: 'Cargos', path: '/configuracoes?tab=cargos' },
-      { icon: Settings, label: 'Sistema', path: '/configuracoes?tab=sistema' },
+      { icon: Monitor, label: 'Sistema', path: '/configuracoes?tab=sistema' },
     ]
   }
 ];
