@@ -225,7 +225,7 @@ export function DREPage() {
             <DREReportRow label="(-) Deduções e Impostos" value={dre.TAX} type="sub" indent details={dre.groups.TAX} />
             
             <div className="h-6" />
-            <DREReportRow label="RECEITA LÍTQUIDA" value={dre.netRevenue} type="main" />
+            <DREReportRow label="RECEITA LÍQUIDA" value={dre.netRevenue} type="main" />
             <DREReportRow label="(-) Custos Variáveis (CPV/CMV)" value={dre.VARIABLE_COST} type="sub" indent details={dre.groups.VARIABLE_COST} />
             
             <div className="h-6" />

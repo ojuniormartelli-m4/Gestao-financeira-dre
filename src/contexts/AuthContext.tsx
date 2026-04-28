@@ -70,9 +70,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           login: data.login,
           roleId: data.role_id,
           active: data.active !== false,
-          mustChangePassword: false, // DESATIVADO TEMPORARIAMENTE PARA UNLOCK
+          mustChangePassword: data.must_change_password === true,
           photoUrl: data.photo_url
         });
+      } else {
+        // Se não encontrou ou deu erro (como o 406/PGRST116 de "não encontrado")
+        if (error && error.code !== 'PGRST116') {
+          console.warn('[AuthContext] Erro ao buscar perfil (não fatal):', error);
+        }
+
+        console.log('[AuthContext] Perfil não encontrado ou erro no fetch. Tentando garantir perfil para o usuário...');
+        
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        
+        if (authUser) {
+          const newProfile = {
+            id: authUser.id,
+            company_id: authUser.user_metadata?.company_id || 'm4-digital',
+            name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Usuário',
+            login: authUser.email || userId,
+            role_id: 'manager-role', 
+            active: true,
+            must_change_password: true
+          };
+
+          // Usamos UPSERT para evitar 409 Conflict se o registro já existir mas estiver oculto por RLS
+          const { error: upsertError } = await supabase
+            .from('profiles')
+            .upsert([newProfile], { onConflict: 'id' });
+          
+          if (!upsertError) {
+            setUser({
+              id: newProfile.id,
+              companyId: newProfile.company_id,
+              name: newProfile.name,
+              login: newProfile.login,
+              role_id: newProfile.role_id,
+              active: true,
+              mustChangePassword: true
+            });
+          } else {
+            console.error('[AuthContext] Erro fatal no auto-provisionamento:', upsertError);
+          }
+        }
       }
     } catch (e) {
       console.error('Error loading profile:', e);

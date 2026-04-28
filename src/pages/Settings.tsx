@@ -307,24 +307,53 @@ export function SettingsPage() {
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUser.login) return;
+    if (!newUser.login || !newUser.password) {
+      alert('Login e senha são obrigatórios.');
+      return;
+    }
+    
+    setSeedLoading(true);
     try {
-      const { error } = await supabase.from('profiles').insert([{
-        id: crypto.randomUUID(), // Temporário: idealmente usaríamos invite via Edge Functions
-        company_id: companyId,
-        name: newUser.name,
-        login: newUser.login,
-        role_id: newUser.roleId,
-        photo_url: newUser.photoUrl,
-        active: true
-      }]);
-      if (error) throw error;
+      // 1. Tentar criar usuário no Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.login.includes('@') ? newUser.login : `${newUser.login}@finscale.internal`,
+        password: newUser.password,
+        options: {
+          data: {
+            name: newUser.name,
+            company_id: companyId
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // 2. Criar perfil vinculado (o trigger de banco pode lidar com isso, mas garantimos aqui)
+        const { error: profileError } = await supabase.from('profiles').upsert([{
+          id: authData.user.id,
+          company_id: companyId,
+          name: newUser.name,
+          login: newUser.login,
+          role_id: newUser.roleId,
+          photo_url: newUser.photoUrl,
+          active: true,
+          must_change_password: true
+        }]);
+
+        if (profileError) throw profileError;
+        
+        alert(`Usuário ${newUser.login} criado com sucesso! Ele deverá usar a senha provisória e trocá-la no primeiro acesso.`);
+      }
+
       setNewUser({ name: '', login: '', password: '', roleId: '', photoUrl: '', active: true });
       setIsAddingUser(false);
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Erro ao criar usuário.');
+      alert('Erro ao criar usuário: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setSeedLoading(false);
     }
   };
 
@@ -696,18 +725,22 @@ export function SettingsPage() {
             <AnimatePresence>
               {isAddingUser && (
                 <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddUser} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Input label="Nome Completo" value={newUser.name} onChange={(v: string) => setNewUser({...newUser, name: v})} />
-                    <Input label="Usuário (Login)" value={newUser.login} onChange={(v: string) => setNewUser({...newUser, login: v})} placeholder="ex: joao.silva" />
+                    <Input label="E-mail / Login" value={newUser.login} onChange={(v: string) => setNewUser({...newUser, login: v})} placeholder="ex: joao@empresa.com" />
+                    <Input label="Senha Provisória" type="password" value={newUser.password} onChange={(v: string) => setNewUser({...newUser, password: v})} placeholder="Mínimo 6 caracteres" />
                     <Select label="Cargo" value={newUser.roleId} onChange={(v: string) => setNewUser({...newUser, roleId: v})} options={roles.map(r => ({v: r.id, l: r.name}))} />
                   </div>
                   <div className="flex bg-accent/5 p-4 rounded-xl items-center gap-3 border border-accent/10">
                     <AlertCircle className="text-accent" size={18} />
-                    <p className="text-[10px] text-text-secondary">O usuário será criado com o e-mail interno para compatibilidade com o sistema de autenticação.</p>
+                    <p className="text-[10px] text-text-secondary">O usuário será criado no sistema de autenticação e no banco de dados. Ele precisará trocar a senha no primeiro login.</p>
                   </div>
                   <div className="flex justify-end gap-2">
                     <button type="button" onClick={() => setIsAddingUser(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>
-                    <button type="submit" className="px-4 py-2 bg-accent text-bg rounded-xl text-sm font-bold">Criar Usuário</button>
+                    <button type="submit" disabled={seedLoading} className="px-6 py-2 bg-accent text-bg rounded-xl text-sm font-bold flex items-center gap-2">
+                      {seedLoading ? <RefreshCw size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                      {seedLoading ? 'Criando...' : 'Criar Usuário'}
+                    </button>
                   </div>
                 </motion.form>
               )}
@@ -728,7 +761,7 @@ export function SettingsPage() {
                       setIsEditingUserModalOpen(true);
                     }}
                     className={cn(
-                      "p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent/30 transition-all",
+                      "p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent transition-all",
                       u.active === false && "opacity-60"
                     )}
                   >
@@ -746,20 +779,10 @@ export function SettingsPage() {
                           {u.name}
                           {u.active === false && <span className="text-[8px] bg-danger/10 text-danger px-1.5 py-0.5 rounded-full uppercase">Inativo</span>}
                         </div>
-                        <div className="text-[10px] text-text-secondary uppercase">{roles.find(r => r.id === u.roleId)?.name || 'Sem Cargo'}</div>
+                        <div className="text-[10px] text-text-secondary uppercase">{u.login}</div>
+                        <div className="text-[9px] text-accent font-bold uppercase">{roles.find(r => r.id === u.roleId)?.name || 'Sem Cargo'}</div>
                       </div>
                     </div>
-                    {canManage && !isSelf && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete('usuarios', u.id);
-                        }} 
-                        className="p-2 text-text-secondary hover:text-danger opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
                   </div>
                 );
               })}
@@ -1018,44 +1041,41 @@ export function SettingsPage() {
       </div>
 
       {isEditingUserModalOpen && editingUser && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-bg/80 backdrop-blur-md" onClick={() => setIsEditingUserModalOpen(false)} />
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative w-full max-w-md bg-surface border border-border rounded-3xl shadow-2xl p-6 space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Editar Usuário</h2>
-              <button onClick={() => setIsEditingUserModalOpen(false)} className="p-2 hover:bg-white/5 rounded-xl text-text-secondary"><X size={20} /></button>
-            </div>
+        <EntityEditModal
+          title="Editar Usuário"
+          item={editingUser}
+          onClose={() => {
+            setIsEditingUserModalOpen(false);
+            setEditingUser(null);
+          }}
+          onSave={async (data: any) => {
+            const { error } = await supabase
+              .from('profiles')
+              .update({
+                name: data.name,
+                role_id: data.roleId,
+                active: data.active,
+                must_change_password: data.mustChangePassword
+              })
+              .eq('id', data.id);
+            if (error) throw error;
             
-            <form onSubmit={handleUpdateUser} className="space-y-4">
-              <Input label="Nome Completo" value={editingUser.name} onChange={(v: string) => setEditingUser({...editingUser, name: v})} />
-              <Input label="Login" value={editingUser.login} onChange={(v: string) => setEditingUser({...editingUser, login: v})} />
-              <Input label="Senha" type="password" value={editingUser.password} onChange={(v: string) => setEditingUser({...editingUser, password: v})} />
-              
-              {['admin-role', 'manager-role', 'supervisor-role'].includes(user?.roleId || '') ? (
-                <>
-                  <Select label="Cargo" value={editingUser.roleId} onChange={(v: string) => setEditingUser({...editingUser, roleId: v})} options={roles.map(r => ({v: r.id, l: r.name}))} />
-                  <div className="flex items-center gap-2 p-3 bg-bg rounded-xl border border-border">
-                    <input 
-                      type="checkbox" 
-                      id="user-active"
-                      checked={editingUser.active !== false} 
-                      onChange={(e) => setEditingUser({...editingUser, active: e.target.checked})}
-                      className="rounded border-border text-accent focus:ring-accent bg-bg"
-                    />
-                    <label htmlFor="user-active" className="text-sm font-bold text-text-primary cursor-pointer">Usuário Ativo</label>
-                  </div>
-                </>
-              ) : (
-                <div className="p-4 bg-bg/50 rounded-xl border border-border space-y-2">
-                  <div className="text-[10px] font-bold uppercase text-text-secondary">Cargo (Somente Leitura)</div>
-                  <div className="text-sm font-bold text-text-primary">{roles.find(r => r.id === editingUser.roleId)?.name}</div>
-                </div>
-              )}
-
-              <button type="submit" className="w-full py-4 bg-accent text-bg rounded-2xl font-bold hover:opacity-90 transition-all shadow-lg shadow-accent/20">Salvar Alterações</button>
-            </form>
-          </motion.div>
-        </div>
+            // Se houver senha nova no data, precisaríamos da service role para atualizar o auth.users
+            // Mas em preview só atualizamos o profile.
+            
+            loadData();
+          }}
+          onDelete={async () => {
+             await handleDelete('usuarios', editingUser.id);
+          }}
+          fields={[
+            { key: 'name', label: 'Nome Completo', type: 'text' },
+            { key: 'login', label: 'Login (E-mail)', type: 'text', disabled: true },
+            { key: 'roleId', label: 'Cargo', type: 'select', options: roles.map(r => ({v: r.id, l: r.name})) },
+            { key: 'active', label: 'Status', type: 'select', options: [{v: true, l: 'Ativo'}, {v: false, l: 'Inativo'}] },
+            { key: 'mustChangePassword', label: 'Exigir Troca de Senha', type: 'select', options: [{v: true, l: 'Sim'}, {v: false, l: 'Não'}] }
+          ]}
+        />
       )}
 
       {isStatementModalOpen && selectedBankForStatement && (
@@ -1273,7 +1293,7 @@ function EntityEditModal({ title, item, onClose, onSave, onDelete, fields }: any
                     value={formData[f.key]} 
                     onChange={(v: any) => setFormData({ ...formData, [f.key]: v })}
                     options={f.options}
-                    disabled={!isEditing}
+                    disabled={f.disabled || !isEditing}
                   />
                 ) : (
                   <Input 
@@ -1281,7 +1301,7 @@ function EntityEditModal({ title, item, onClose, onSave, onDelete, fields }: any
                     type={f.type}
                     value={formData[f.key]} 
                     onChange={(v: any) => setFormData({ ...formData, [f.key]: v })}
-                    disabled={!isEditing}
+                    disabled={f.disabled || !isEditing}
                   />
                 )}
               </div>

@@ -160,20 +160,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 14. Desativar RLS (Habilite e configure políticas conforme necessário)
-ALTER TABLE roles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
-ALTER TABLE bank_accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE cost_centers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE contacts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE payment_methods DISABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
-ALTER TABLE transfers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE credit_cards DISABLE ROW LEVEL SECURITY;
-ALTER TABLE company_configs DISABLE ROW LEVEL SECURITY;
+-- 14. Configuração de RLS (Row Level Security)
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cost_centers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payment_methods ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transfers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_configs ENABLE ROW LEVEL SECURITY;
 
--- 15. Políticas Básicas (Opcional)
+-- 15. Políticas de Acesso (Permissivo para Preview, mas estruturado)
 CREATE POLICY "Permitir tudo" ON roles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo" ON profiles FOR ALL USING (true);
 CREATE POLICY "Permitir tudo" ON bank_accounts FOR ALL USING (true);
@@ -289,13 +289,14 @@ BEGIN
     END IF;
 
     -- 2. Garantir perfil público vinculado sem deletar (evita erros de FK)
-    INSERT INTO public.profiles (id, company_id, name, login, role_id, active)
-    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin@finscale.internal', 'admin-role', true)
+    INSERT INTO public.profiles (id, company_id, name, login, role_id, active, must_change_password)
+    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin@finscale.internal', 'admin-role', true, false)
     ON CONFLICT (id) DO UPDATE SET 
       name = EXCLUDED.name,
       login = EXCLUDED.login,
       role_id = EXCLUDED.role_id,
-      active = EXCLUDED.active;
+      active = EXCLUDED.active,
+      must_change_password = EXCLUDED.must_change_password;
 END $$;
 `;
 
@@ -535,12 +536,13 @@ BEGIN
         WHERE id = v_user_id;
     END IF;
 
-    INSERT INTO public.profiles (id, company_id, name, login, role_id, active)
-    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin@finscale.internal', 'admin-role', true)
+    INSERT INTO public.profiles (id, company_id, name, login, role_id, active, must_change_password)
+    VALUES (v_user_id, '${APP_COMPANY_ID}', 'Administrador Inicial', 'admin@finscale.internal', 'admin-role', true, false)
     ON CONFLICT (id) DO UPDATE SET 
       name = EXCLUDED.name,
       login = EXCLUDED.login,
       role_id = EXCLUDED.role_id,
-      active = EXCLUDED.active;
+      active = EXCLUDED.active,
+      must_change_password = EXCLUDED.must_change_password;
 END $$;
 `;

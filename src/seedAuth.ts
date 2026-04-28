@@ -107,7 +107,7 @@ async function ensureProfileExists(userId: string, companyId: string, email: str
       role_id: 'admin-role',
       photo_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
       active: true,
-      must_change_password: true
+      must_change_password: false
     }]);
     
     if (profileError) {

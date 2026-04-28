@@ -1219,7 +1219,10 @@ export async function gerarDRE(companyId: string, mes: number, ano: number, bank
     if (!categoria) return;
 
     const amount = t.amount;
-    const groupKey = categoria.dreGroup;
+    let groupKey = categoria.dreGroup;
+
+    // Normalização: OPERATING_REVENUE e GROSS_REVENUE são tratados como o mesmo grupo para cálculos
+    if (groupKey === 'OPERATING_REVENUE') groupKey = 'GROSS_REVENUE';
     
     if (groupKey in dre) {
       (dre as any)[groupKey] += amount;

@@ -7,6 +7,7 @@ export type TransactionType = 'REVENUE' | 'EXPENSE';
 
 export type DREGroup = 
   | 'GROSS_REVENUE' 
+  | 'OPERATING_REVENUE'
   | 'TAX' 
   | 'VARIABLE_COST' 
   | 'FIXED_COST' 
