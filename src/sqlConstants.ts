@@ -120,6 +120,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   status TEXT CHECK (status IN ('PAID', 'PENDING', 'CANCELLED', 'SCHEDULED', 'CONCILIATED')),
   installment_number INTEGER,
   installments_total INTEGER,
+  recurrence_type TEXT CHECK (recurrence_type IN ('SINGLE', 'FIXED', 'VARIABLE')),
+  recurrence_frequency TEXT CHECK (recurrence_frequency IN ('MONTHLY', 'YEARLY')),
+  due_day INTEGER,
+  is_recurring BOOLEAN DEFAULT false,
   group_id TEXT,
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
@@ -127,6 +131,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   is_conciliated BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Índice para busca rápida de grupos de parcelas
+CREATE INDEX IF NOT EXISTS idx_transactions_group_id ON transactions(group_id);
 
 -- 11. Criar Tabela de Transferências
 CREATE TABLE IF NOT EXISTS transfers (
@@ -399,6 +406,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   status TEXT CHECK (status IN ('PAID', 'PENDING', 'CANCELLED', 'SCHEDULED', 'CONCILIATED')),
   installment_number INTEGER,
   installments_total INTEGER,
+  recurrence_type TEXT CHECK (recurrence_type IN ('SINGLE', 'FIXED', 'VARIABLE')),
+  recurrence_frequency TEXT CHECK (recurrence_frequency IN ('MONTHLY', 'YEARLY')),
+  due_day INTEGER,
+  is_recurring BOOLEAN DEFAULT false,
   group_id TEXT,
   date_competence TIMESTAMPTZ NOT NULL,
   date_payment TIMESTAMPTZ,
@@ -410,11 +421,18 @@ CREATE TABLE IF NOT EXISTS transactions (
 -- Garantir colunas novas no UPDATE
 DO $$ 
 BEGIN 
-    BEGIN ALTER TABLE transactions ADD COLUMN installment_number INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
-    BEGIN ALTER TABLE transactions ADD COLUMN installments_total INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
-    BEGIN ALTER TABLE transactions ADD COLUMN group_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
-    BEGIN ALTER TABLE transactions ADD COLUMN is_conciliated BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS installment_number INTEGER DEFAULT 1; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS installments_total INTEGER DEFAULT 1; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS recurrence_type TEXT DEFAULT 'SINGLE'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS recurrence_frequency TEXT DEFAULT 'MONTHLY'; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_day INTEGER; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS group_id TEXT; EXCEPTION WHEN duplicate_column THEN NULL; END;
+    BEGIN ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_conciliated BOOLEAN DEFAULT false; EXCEPTION WHEN duplicate_column THEN NULL; END;
 END $$;
+
+-- Índice para busca rápida de grupos de parcelas
+CREATE INDEX IF NOT EXISTS idx_transactions_group_id ON transactions(group_id);
 
 CREATE TABLE IF NOT EXISTS transfers (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

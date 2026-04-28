@@ -94,6 +94,9 @@ export interface Transaction {
   datePayment?: Date;   // Base para Fluxo de Caixa (se pago)
   status: TransactionStatus;
   isRecurring: boolean;
+  recurrenceType?: 'SINGLE' | 'FIXED' | 'VARIABLE';
+  recurrenceFrequency?: 'MONTHLY' | 'YEARLY';
+  dueDay?: number;
   tags?: string[];
   metadataAI?: {
     confidence: number;

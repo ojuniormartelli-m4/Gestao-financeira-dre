@@ -25,7 +25,7 @@ async function callAI(prompt: string, retryCount = 0): Promise<string | null> {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
     });
     return response.text;

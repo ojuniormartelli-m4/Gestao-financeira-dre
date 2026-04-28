@@ -1164,13 +1164,17 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
     datePayment: transaction?.datePayment ? format(transaction.datePayment, 'yyyy-MM-dd') : '',
     status: (transaction?.status || 'PENDING') as TransactionStatus,
     bank_account_id: transaction?.bankAccountId || bankAccounts[0]?.id || '',
-    installmentsTotal: 1
+    installmentsTotal: transaction?.installmentsTotal || 1,
+    recurrenceType: (transaction?.recurrenceType || 'SINGLE') as 'SINGLE' | 'FIXED' | 'VARIABLE',
+    recurrenceFrequency: (transaction?.recurrenceFrequency || 'MONTHLY') as 'MONTHLY' | 'YEARLY',
+    dueDay: transaction?.dueDay || (transaction?.dateCompetence ? new Date(transaction.dateCompetence).getDate() : new Date().getDate())
   });
   const [loading, setLoading] = React.useState(false);
   const [isEditMode, setIsEditMode] = React.useState(transaction ? (initialMode === 'edit') : true);
   const [isSubmittingLocked, setIsSubmittingLocked] = React.useState(false);
   const [isCreditCard, setIsCreditCard] = React.useState(!!transaction?.creditCardId);
-  const [isInstallment, setIsInstallment] = React.useState(false);
+  const [isRecurring, setIsRecurring] = React.useState(!!transaction?.recurrenceType && transaction?.recurrenceType !== 'SINGLE');
+  const [isInstallment, setIsInstallment] = React.useState((transaction?.installmentsTotal || 1) > 1);
 
   React.useEffect(() => {
     if (isEditMode) {
@@ -1281,9 +1285,12 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
         contactId: formData.contact_id || undefined,
         paymentMethodId: formData.payment_method_id || undefined,
         creditCardId: formData.credit_card_id || undefined,
-        installmentsTotal: isInstallment ? formData.installmentsTotal : 1,
+        installmentsTotal: (isInstallment || isRecurring) ? formData.installmentsTotal : 1,
+        recurrenceType: formData.recurrenceType,
+        recurrenceFrequency: formData.recurrenceFrequency,
+        dueDay: formData.dueDay,
         companyId,
-        isRecurring: false,
+        isRecurring: isRecurring,
         userId: user?.id
       };
 
@@ -1365,6 +1372,85 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
             />
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-text-secondary uppercase ml-1">Tipo de Lançamento</label>
+            <div className="flex bg-bg p-1 rounded-2xl border border-border">
+              {[
+                { id: 'SINGLE', label: 'Único' },
+                { id: 'FIXED', label: 'Recorrente Fixo' },
+                { id: 'VARIABLE', label: 'Recorrente Variável' }
+              ].map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={!isEditMode}
+                  onClick={() => {
+                    const rec = t.id !== 'SINGLE';
+                    setIsRecurring(rec);
+                    setFormData(prev => ({ ...prev, recurrenceType: t.id as any }));
+                    if (!rec) setIsInstallment(false);
+                  }}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all",
+                    formData.recurrenceType === t.id ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {formData.recurrenceType === 'VARIABLE' && (
+              <p className="text-[10px] text-accent mt-1 ml-1 animate-pulse">
+                * O valor poderá ser editado em cada recorrência
+              </p>
+            )}
+          </div>
+
+          {isRecurring && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className="grid grid-cols-3 gap-3 overflow-hidden"
+            >
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Frequência</label>
+                <select
+                  disabled={!isEditMode}
+                  value={formData.recurrenceFrequency}
+                  onChange={(e) => setFormData({ ...formData, recurrenceFrequency: e.target.value as any })}
+                  className="w-full bg-bg border border-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-accent appearance-none disabled:opacity-70"
+                >
+                  <option value="MONTHLY">Mensal</option>
+                  <option value="YEARLY">Anual</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Dia Venc.</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  disabled={!isEditMode}
+                  value={formData.dueDay}
+                  onChange={(e) => setFormData({ ...formData, dueDay: Number(e.target.value) })}
+                  className="w-full bg-bg border border-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-accent disabled:opacity-70"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Parcelas</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="72"
+                  disabled={!isEditMode}
+                  value={formData.installmentsTotal}
+                  onChange={(e) => setFormData({ ...formData, installmentsTotal: Number(e.target.value) })}
+                  className="w-full bg-bg border border-border rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-accent disabled:opacity-70"
+                />
+              </div>
+            </motion.div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-text-secondary uppercase ml-1">Valor</label>
@@ -1395,62 +1481,6 @@ function TransactionModal({ onClose, onSuccess, companyId, transaction, initialM
               </select>
             </div>
           </div>
-
-          {!transaction && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-text-secondary uppercase ml-1">Parcelado?</label>
-                <div className="flex bg-bg p-1 rounded-2xl border border-border">
-                  <button
-                    type="button"
-                    disabled={!isEditMode}
-                    onClick={() => {
-                      setIsInstallment(false);
-                      setFormData(prev => ({ ...prev, installmentsTotal: 1 }));
-                    }}
-                    className={cn(
-                      "flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all",
-                      !isInstallment ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
-                    )}
-                  >
-                    Não
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!isEditMode}
-                    onClick={() => setIsInstallment(true)}
-                    className={cn(
-                      "flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all",
-                      isInstallment ? "bg-accent text-bg shadow-sm" : "text-text-secondary"
-                    )}
-                  >
-                    Sim
-                  </button>
-                </div>
-              </div>
-              {isInstallment ? (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-text-secondary uppercase ml-1">Nº de Parcelas</label>
-                  <input 
-                    type="number" 
-                    min="2"
-                    max="72"
-                    disabled={!isEditMode}
-                    value={formData.installmentsTotal}
-                    onChange={(e) => setFormData({ ...formData, installmentsTotal: Number(e.target.value) })}
-                    className="w-full bg-bg border border-border rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-70"
-                  />
-                </div>
-              ) : (
-                <div className="space-y-1.5 opacity-40 select-none">
-                  <label className="text-xs font-bold text-text-secondary uppercase ml-1 opacity-50">Nº de Parcelas</label>
-                  <div className="w-full bg-bg/50 border border-border rounded-2xl py-3 px-4 text-sm text-text-secondary">
-                    Pagamento Único
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">

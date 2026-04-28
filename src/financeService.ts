@@ -6,23 +6,49 @@ export const financeService = {
     try {
       const normalizedCompanyId = String(companyId || '').trim();
       const installments = data.installmentsTotal || 1;
-      const amountPerInstallment = data.amount / installments;
+      const isRecurring = data.recurrenceType && data.recurrenceType !== 'SINGLE';
+      
+      // Para recorrente fixo o valor total é dividido pelas parcelas? 
+      // Geralmente "Recorrente" significa que cada parcela tem aquele valor.
+      // "Parcelado" significa que o valor total é dividido.
+      // Para manter compatibilidade com o que já existia (installments), vou assumir:
+      // Se installmentsTotal > 1 e NÃO for recorrente (ou for SINGLE), divide o valor.
+      // Se for recorrente (FIXED/VARIABLE), cada lançamento tem o valor cheio (data.amount).
+      
+      const amountPerEntry = (isRecurring || installments === 1) ? data.amount : (data.amount / installments);
       
       const transactionsToInsert = [];
+      const groupId = isRecurring || installments > 1 ? crypto.randomUUID() : null;
       
       for (let i = 0; i < installments; i++) {
         const dateComp = new Date(data.dateCompetence);
-        dateComp.setMonth(dateComp.getMonth() + i);
+        
+        if (data.recurrenceFrequency === 'YEARLY') {
+          dateComp.setFullYear(dateComp.getFullYear() + i);
+        } else {
+          dateComp.setMonth(dateComp.getMonth() + i);
+        }
+        
+        if (data.dueDay) {
+          dateComp.setDate(data.dueDay);
+        }
         
         const datePay = data.datePayment ? new Date(data.datePayment) : null;
         if (datePay) {
-          datePay.setMonth(datePay.getMonth() + i);
+          if (data.recurrenceFrequency === 'YEARLY') {
+            datePay.setFullYear(datePay.getFullYear() + i);
+          } else {
+            datePay.setMonth(datePay.getMonth() + i);
+          }
+          if (data.dueDay) {
+            datePay.setDate(data.dueDay);
+          }
         }
 
         const insertData: any = {
           company_id: normalizedCompanyId,
           description: installments > 1 ? `${data.description} (${i + 1}/${installments})` : data.description,
-          amount: installments > 1 ? amountPerInstallment : data.amount,
+          amount: amountPerEntry,
           type: data.type,
           category_id: data.categoryId,
           bank_account_id: data.bankAccountId,
@@ -31,7 +57,12 @@ export const financeService = {
           date_payment: datePay ? datePay.toISOString() : null,
           is_conciliated: false,
           installment_number: installments > 1 ? i + 1 : null,
-          installments_total: installments > 1 ? installments : null
+          installments_total: installments > 1 ? installments : null,
+          recurrence_type: data.recurrenceType || 'SINGLE',
+          recurrence_frequency: data.recurrenceFrequency || 'MONTHLY',
+          due_day: data.dueDay || null,
+          is_recurring: isRecurring,
+          group_id: groupId
         };
 
         if (data.userId) insertData.user_id = data.userId;
@@ -43,31 +74,48 @@ export const financeService = {
         transactionsToInsert.push(insertData);
       }
 
+      console.log(`[financeService] Inserindo ${transactionsToInsert.length} registros no Supabase...`);
       const { data: insertedData, error } = await supabase
         .from('transactions')
         .insert(transactionsToInsert)
         .select();
 
       if (error) {
-        console.error('Erro detalhado do Supabase (Insert Multi):', error);
+        console.error('[financeService] Erro detalhado no Insert Multi:', error);
         throw error;
       }
+
+      console.log('[financeService] Insert realizado com sucesso. Atualizando saldo se necessário...');
 
       // Atualizar saldo da conta bancária se a PRIMEIRA transação estiver paga e não for cartão de crédito
       if (data.status === 'PAID' && data.bankAccountId && !data.creditCardId) {
         const balanceChange = data.type === 'REVENUE' 
-          ? Number(amountPerInstallment) 
-          : -Number(amountPerInstallment);
+          ? Number(amountPerEntry) 
+          : -Number(amountPerEntry);
         
-        await supabase.rpc('increment_balance', { 
+        console.log(`[financeService] Chamando RPC increment_balance para conta ${data.bankAccountId} com valor ${balanceChange}`);
+        const { error: rpcError } = await supabase.rpc('increment_balance', { 
           account_id: data.bankAccountId, 
-          amount_to_add: balanceChange 
+          amount: balanceChange // Corrigido de amount_to_add para amount
         });
+        
+        if (rpcError) {
+          console.error('[financeService] Erro no RPC increment_balance:', rpcError);
+          // Não lançamos erro aqui para não travar a criação da transação se o saldo falhar
+        } else {
+          console.log('[financeService] Saldo atualizado com sucesso.');
+        }
       }
 
-      return insertedData[0].id;
-    } catch (error) {
-      console.error('Supabase Error (adicionarTransacao):', error);
+      const resultId = (insertedData && insertedData.length > 0) ? insertedData[0].id : null;
+      console.log('[financeService] adicionarTransacao finalizado. ID:', resultId);
+      return resultId;
+    } catch (error: any) {
+      console.error('[financeService] Erro fatal em adicionarTransacao:', error);
+      // Log do corpo do erro se disponível
+      if (error && typeof error === 'object') {
+        console.error('[financeService] Detalhes do erro:', JSON.stringify(error, null, 2));
+      }
       throw error;
     }
   },
@@ -106,6 +154,10 @@ export const financeService = {
       if (data.status !== undefined) updateData.status = data.status;
       if (data.installmentNumber !== undefined) updateData.installment_number = data.installmentNumber;
       if (data.installmentsTotal !== undefined) updateData.installments_total = data.installmentsTotal;
+      if (data.recurrenceType !== undefined) updateData.recurrence_type = data.recurrenceType;
+      if (data.recurrenceFrequency !== undefined) updateData.recurrence_frequency = data.recurrenceFrequency;
+      if (data.dueDay !== undefined) updateData.due_day = data.dueDay;
+      if (data.isRecurring !== undefined) updateData.is_recurring = data.isRecurring;
       if (data.groupId !== undefined) updateData.group_id = data.groupId;
       if (data.dateCompetence) updateData.date_competence = data.dateCompetence.toISOString();
       if (data.datePayment) updateData.date_payment = data.datePayment.toISOString();
@@ -133,7 +185,7 @@ export const financeService = {
           const adj = oldTx.type === 'REVENUE' ? -oldTx.amount : oldTx.amount;
           await supabase.rpc('increment_balance', { 
             account_id: oldTx.bank_account_id, 
-            amount_to_add: adj 
+            amount: adj 
           });
         }
         
@@ -147,7 +199,7 @@ export const financeService = {
             const adj = finalType === 'REVENUE' ? finalAmount : -finalAmount;
             await supabase.rpc('increment_balance', { 
               account_id: finalBankId, 
-              amount_to_add: adj 
+              amount: adj 
             });
           }
         }
@@ -183,7 +235,7 @@ export const financeService = {
         const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
         await supabase.rpc('increment_balance', { 
           account_id: tx.bank_account_id, 
-          amount_to_add: adj 
+          amount: adj 
         });
       }
     } catch (error) {
@@ -247,7 +299,12 @@ export const financeService = {
         createdAt: new Date(tx.created_at),
         isConciliated: tx.is_conciliated,
         installmentNumber: tx.installment_number,
-        installmentsTotal: tx.installments_total
+        installmentsTotal: tx.installments_total,
+        recurrenceType: tx.recurrence_type,
+        recurrenceFrequency: tx.recurrence_frequency,
+        dueDay: tx.due_day,
+        isRecurring: tx.is_recurring,
+        groupId: tx.group_id
       })) as Transaction[];
     } catch (error) {
       console.error('Supabase Error (buscarTransacoes):', error);
@@ -432,11 +489,11 @@ export const financeService = {
       await Promise.all([
         supabase.rpc('increment_balance', { 
           account_id: data.fromAccountId, 
-          amount_to_add: -data.amount 
+          amount: -data.amount 
         }),
         supabase.rpc('increment_balance', { 
           account_id: data.toAccountId, 
-          amount_to_add: data.amount 
+          amount: data.amount 
         })
       ]);
     } catch (error) {
@@ -474,7 +531,12 @@ export const financeService = {
         createdAt: new Date(tx.created_at),
         isConciliated: tx.is_conciliated,
         installmentNumber: tx.installment_number,
-        installmentsTotal: tx.installments_total
+        installmentsTotal: tx.installments_total,
+        recurrenceType: tx.recurrence_type,
+        recurrenceFrequency: tx.recurrence_frequency,
+        dueDay: tx.due_day,
+        isRecurring: tx.is_recurring,
+        groupId: tx.group_id
       })) as Transaction[];
     } catch (error) {
       console.error('Supabase Error (buscarTodasTransacoes):', error);
@@ -527,14 +589,14 @@ export const financeService = {
         const adj = tx.type === 'REVENUE' ? tx.amount : -tx.amount;
         await supabase.rpc('increment_balance', { 
           account_id: tx.bank_account_id, 
-          amount_to_add: adj 
+          amount: adj 
         });
       } else if (status === 'PENDING' && tx.status === 'PAID' && tx.bank_account_id) {
         // Se mudou de pago para pendente, estornar saldo
         const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
         await supabase.rpc('increment_balance', { 
           account_id: tx.bank_account_id, 
-          amount_to_add: adj 
+          amount: adj 
         });
       }
     } catch (error) {
@@ -1169,7 +1231,7 @@ export const financeService = {
       // 5. Atualizar saldo da conta bancária atomicamente via RPC
       await supabase.rpc('increment_balance', { 
         account_id: accountId, 
-        amount_to_add: -amount 
+        amount: -amount 
       });
 
       return tx.id;
