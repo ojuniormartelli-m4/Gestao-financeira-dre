@@ -21,20 +21,18 @@ export async function createRoles() {
 
 export async function createChartOfAccounts(companyId: string) {
   const defaultCategories = [
-    { name: 'Venda de Produtos', type: 'REVENUE', dre_group: 'GROSS_REVENUE' },
-    { name: 'Prestação de Serviços', type: 'REVENUE', dre_group: 'GROSS_REVENUE' },
-    { name: 'Impostos sobre Vendas', type: 'EXPENSE', dre_group: 'TAX' },
-    { name: 'Fornecedores / Mercadorias', type: 'EXPENSE', dre_group: 'VARIABLE_COST' },
-    { name: 'Fretes e Carretos', type: 'EXPENSE', dre_group: 'VARIABLE_COST' },
-    { name: 'Aluguel e Condomínio', type: 'EXPENSE', dre_group: 'FIXED_COST' },
-    { name: 'Salários e Encargos', type: 'EXPENSE', dre_group: 'FIXED_COST' },
-    { name: 'Energia / Água / Internet', type: 'EXPENSE', dre_group: 'FIXED_COST' },
-    { name: 'Marketing e Vendas', type: 'EXPENSE', dre_group: 'FIXED_COST' },
-    { name: 'Tarifas Bancárias', type: 'EXPENSE', dre_group: 'NON_OPERATING' },
-    { name: 'Receitas Financeiras', type: 'REVENUE', dre_group: 'NON_OPERATING' }
+    { name: 'Venda de Produtos', type: 'REVENUE', dre_group: 'OPERATING_REVENUE' },
+    { name: 'Prestação de Serviços', type: 'REVENUE', dre_group: 'OPERATING_REVENUE' },
+    { name: 'Receitas Financeiras', type: 'REVENUE', dre_group: 'NON_OPERATING' },
+    { name: 'Outras Receitas', type: 'REVENUE', dre_group: 'NON_OPERATING' },
+    { name: 'Custos de Vendas', type: 'EXPENSE', dre_group: 'VARIABLE_COST' },
+    { name: 'Despesas Operacionais', type: 'EXPENSE', dre_group: 'FIXED_COST' },
+    { name: 'Pessoal/Salários', type: 'EXPENSE', dre_group: 'FIXED_COST' },
+    { name: 'Marketing/Anúncios', type: 'EXPENSE', dre_group: 'VARIABLE_COST' },
+    { name: 'Tarifas Bancárias/Impostos', type: 'EXPENSE', dre_group: 'TAX' }
   ];
 
-  const { error } = await supabase.from('chart_of_accounts').insert(defaultCategories.map(cat => ({ ...cat, company_id: companyId })));
+  const { error } = await supabase.from('chart_of_accounts').insert(defaultCategories.map(cat => ({ ...cat, company_id: companyId, active: true })));
   if (error) throw error;
 }
 

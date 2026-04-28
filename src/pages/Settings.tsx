@@ -4,7 +4,6 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCompany } from '../contexts/CompanyContext';
 import { financeService } from '../financeService';
-import { ChartOfAccount } from '../types';
 import { 
   Plus, 
   Trash2, 
@@ -38,12 +37,21 @@ import { seedAuthData } from '../seedAuth';
 import { popularDadosTeste } from '../mockData';
 import { RESET_DATABASE_SQL, UPDATE_DATABASE_SQL } from '../sqlConstants';
 
+import { ChartOfAccountsPage } from './ChartOfAccounts';
+import { CostCentersPage } from './CostCenters';
+import { PaymentMethodsPage } from './PaymentMethods';
 import { useTheme } from '../contexts/ThemeContext';
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const { companyId, setCompanyId, refreshData: refreshGlobalData } = useCompany();
+  const { 
+    companyConfig: globalCompanyConfig, 
+    setCompanyConfig: setGlobalCompanyConfig,
+    companyId,
+    setCompanyId,
+    refreshData: refreshGlobalData
+  } = useCompany();
   
   const getInitialTab = () => {
     switch (tabParam) {
@@ -102,22 +110,15 @@ export function SettingsPage() {
     setSearchParams({ tab: param });
   };
   const { theme, toggleTheme } = useTheme();
-  const [categories, setCategories] = useState<ChartOfAccount[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [costCenters, setCostCenters] = useState<any[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [companyConfig, setCompanyConfig] = useState<any>({ name: '', logoUrl: '' });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
-  
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<any>(null);
-  const [newCategory, setNewCategory] = useState({ name: '', type: 'EXPENSE', dreGroup: 'FIXED_COST' });
   
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', login: '', password: '', roleId: '', photoUrl: '', active: true });
@@ -131,17 +132,8 @@ export function SettingsPage() {
   const [editingBank, setEditingBank] = useState<any>(null);
   const [newBank, setNewBank] = useState({ name: '', type: 'CHECKING', initialBalance: 0 });
 
-  const [isAddingCostCenter, setIsAddingCostCenter] = useState(false);
-  const [editingCostCenter, setEditingCostCenter] = useState<any>(null);
-  const [newCostCenter, setNewCostCenter] = useState({ name: '', color: '#22c55e' });
-
-  const [isAddingPaymentMethod, setIsAddingPaymentMethod] = useState(false);
-  const [editingPaymentMethod, setEditingPaymentMethod] = useState<any>(null);
-  const [newPaymentMethod, setNewPaymentMethod] = useState({ name: '' });
-
   const [selectedBankForStatement, setSelectedBankForStatement] = useState<any>(null);
   const [isStatementModalOpen, setIsStatementModalOpen] = useState(false);
-  const { companyConfig: globalCompanyConfig, setCompanyConfig: setGlobalCompanyConfig } = useCompany();
 
   const { user, loading: authLoading } = useAuth();
   const [editCompanyId, setEditCompanyId] = useState(companyId);
@@ -193,16 +185,12 @@ export function SettingsPage() {
     if (!user) return;
     setLoading(true);
     try {
-      const [cats, usersRes, rolesRes, banks, costs, payments] = await Promise.all([
-        financeService.buscarPlanoDeContas(companyId),
+      const [usersRes, rolesRes, banks] = await Promise.all([
         supabase.from('profiles').select('*'),
         supabase.from('roles').select('*'),
-        financeService.buscarContasBancarias(companyId),
-        financeService.buscarCentrosCusto(companyId),
-        financeService.buscarFormasPagamento(companyId)
+        financeService.buscarContasBancarias(companyId)
       ]);
       
-      setCategories(cats || []);
       setUsers(usersRes.data?.map(u => ({
         id: u.id,
         name: u.name,
@@ -214,8 +202,6 @@ export function SettingsPage() {
       })) || []);
       setRoles(rolesRes.data || []);
       setBankAccounts(banks || []);
-      setCostCenters(costs || []);
-      setPaymentMethods(payments || []);
       
       // Initialize local state with global config
       setCompanyConfig(globalCompanyConfig);
@@ -291,19 +277,6 @@ export function SettingsPage() {
       loadData();
     }
   }, [user, authLoading]);
-
-  const handleAddCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCategory.name) return;
-    try {
-      await financeService.adicionarCategoria(companyId, { ...newCategory, companyId } as any);
-      setNewCategory({ name: '', type: 'EXPENSE', dreGroup: 'FIXED_COST' });
-      setIsAddingCategory(false);
-      loadData();
-    } catch (error) {
-      console.error(error);
-    }
-  };
 
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -411,32 +384,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleAddCostCenter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCostCenter.name) return;
-    try {
-      await financeService.salvarCentroCusto(companyId, { ...newCostCenter, companyId });
-      setNewCostCenter({ name: '', color: '#22c55e' });
-      setIsAddingCostCenter(false);
-      loadData();
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const handleAddPaymentMethod = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPaymentMethod.name) return;
-    try {
-      await financeService.salvarFormaPagamento(companyId, { ...newPaymentMethod, companyId });
-      setNewPaymentMethod({ name: '' });
-      setIsAddingPaymentMethod(false);
-      loadData();
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   const handleDelete = async (collectionName: string, id: string) => {
     if (!confirm('Tem certeza que deseja excluir este item?')) return;
     
@@ -456,14 +403,8 @@ export function SettingsPage() {
         
         const { error } = await supabase.from('profiles').delete().eq('id', id);
         if (error) throw error;
-      } else if (collectionName === 'categories' || collectionName === 'CATEGORIES') {
-        await financeService.excluirCategoria(companyId, id);
       } else if (collectionName === 'bankAccounts' || collectionName === 'BANKS') {
         await financeService.excluirContaBancaria(companyId, id);
-      } else if (collectionName === 'costCenters' || collectionName === 'COST_CENTERS') {
-        await financeService.excluirCentroCusto(id);
-      } else if (collectionName === 'paymentMethods' || collectionName === 'PAYMENT_METHODS') {
-        await financeService.excluirFormaPagamento(id);
       } else if (collectionName === 'roles') {
         const { error } = await supabase.from('roles').delete().eq('id', id);
         if (error) throw error;
@@ -487,11 +428,6 @@ export function SettingsPage() {
   };
 
   if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
-
-  const groupedCategories = {
-    REVENUE: categories.filter(c => c.type === 'REVENUE'),
-    EXPENSE: categories.filter(c => c.type === 'EXPENSE'),
-  };
 
   return (
     <div className="space-y-8">
@@ -539,42 +475,8 @@ export function SettingsPage() {
 
       <div className="grid grid-cols-1 gap-8">
         {activeTab === 'CATEGORIES' && (
-          <div className="bg-surface rounded-3xl border border-border p-6 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2">Plano de Contas</h3>
-              <button onClick={() => setIsAddingCategory(true)} className="flex items-center gap-2 text-accent font-bold text-sm"><Plus size={16} /> Nova Categoria</button>
-            </div>
-            
-            <AnimatePresence>
-              {isAddingCategory && (
-                <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddCategory} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Input label="Nome" value={newCategory.name} onChange={(v: string) => setNewCategory({...newCategory, name: v})} placeholder="Ex: Marketing" />
-                    <Select label="Tipo" value={newCategory.type} onChange={(v: string) => setNewCategory({...newCategory, type: v as any})} options={[{v:'REVENUE', l:'Receita'}, {v:'EXPENSE', l:'Despesa'}]} />
-                    <Select label="Grupo DRE" value={newCategory.dreGroup} onChange={(v: string) => setNewCategory({...newCategory, dreGroup: v as any})} options={[{v:'GROSS_REVENUE', l:'Receita Bruta'}, {v:'VARIABLE_COST', l:'Custo Variável'}, {v:'FIXED_COST', l:'Despesa Fixa'}, {v:'TAX', l:'Imposto'}]} />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setIsAddingCategory(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>
-                    <button type="submit" className="px-4 py-2 bg-accent text-bg rounded-xl text-sm font-bold">Salvar</button>
-                  </div>
-                </motion.form>
-              )}
-            </AnimatePresence>
-
-            <div className="space-y-8">
-              <CategoryGroup 
-                title="Receitas" 
-                categories={categories.filter(c => c.type === 'REVENUE')} 
-                onEdit={cat => setEditingCategory(cat)}
-                dreLabels={dreGroupLabels}
-              />
-              <CategoryGroup 
-                title="Despesas" 
-                categories={categories.filter(c => c.type === 'EXPENSE')} 
-                onEdit={cat => setEditingCategory(cat)}
-                dreLabels={dreGroupLabels}
-              />
-            </div>
+          <div className="bg-surface rounded-3xl border border-border p-8 shadow-xl">
+            <ChartOfAccountsPage />
           </div>
         )}
 
@@ -635,81 +537,14 @@ export function SettingsPage() {
         )}
 
         {activeTab === 'COST_CENTERS' && (
-          <div className="bg-surface rounded-3xl border border-border p-6 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2">Centros de Custo</h3>
-              <button onClick={() => setIsAddingCostCenter(true)} className="flex items-center gap-2 text-accent font-bold text-sm"><Plus size={16} /> Novo Centro</button>
-            </div>
-
-            <AnimatePresence>
-              {isAddingCostCenter && (
-                <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddCostCenter} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="Nome" value={newCostCenter.name} onChange={(v: string) => setNewCostCenter({...newCostCenter, name: v})} placeholder="Ex: Administrativo" />
-                    <Input label="Cor (Hex)" value={newCostCenter.color} onChange={(v: string) => setNewCostCenter({...newCostCenter, color: v})} type="color" className="h-10" />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setIsAddingCostCenter(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>
-                    <button type="submit" className="px-4 py-2 bg-accent text-bg rounded-xl text-sm font-bold">Salvar Centro</button>
-                  </div>
-                </motion.form>
-              )}
-            </AnimatePresence>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {costCenters.map(cc => (
-                <div 
-                  key={cc.id} 
-                  onClick={() => setEditingCostCenter(cc)}
-                  className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center text-bg font-bold" style={{ backgroundColor: cc.color || '#22c55e' }}>
-                      {cc.name.charAt(0)}
-                    </div>
-                    <span className="text-sm font-bold">{cc.name}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="bg-surface rounded-3xl border border-border p-8 shadow-xl">
+            <CostCentersPage />
           </div>
         )}
 
         {activeTab === 'PAYMENT_METHODS' && (
-          <div className="bg-surface rounded-3xl border border-border p-6 shadow-xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg flex items-center gap-2">Formas de Pagamento</h3>
-              <button onClick={() => setIsAddingPaymentMethod(true)} className="flex items-center gap-2 text-accent font-bold text-sm"><Plus size={16} /> Nova Forma</button>
-            </div>
-
-            <AnimatePresence>
-              {isAddingPaymentMethod && (
-                <motion.form initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} onSubmit={handleAddPaymentMethod} className="mb-8 p-6 bg-bg rounded-2xl border border-accent/20 space-y-4 overflow-hidden">
-                  <div className="max-w-md">
-                    <Input label="Nome" value={newPaymentMethod.name} onChange={(v: string) => setNewPaymentMethod({...newPaymentMethod, name: v})} placeholder="Ex: Pix" />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setIsAddingPaymentMethod(false)} className="px-4 py-2 text-sm font-bold text-text-secondary">Cancelar</button>
-                    <button type="submit" className="px-4 py-2 bg-accent text-bg rounded-xl text-sm font-bold">Salvar Forma</button>
-                  </div>
-                </motion.form>
-              )}
-            </AnimatePresence>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {paymentMethods.map(pm => (
-                <div 
-                  key={pm.id} 
-                  onClick={() => setEditingPaymentMethod(pm)}
-                  className="p-4 bg-bg/50 rounded-2xl border border-border flex items-center justify-between group cursor-pointer hover:border-accent transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center text-accent"><Landmark size={16} /></div>
-                    <span className="text-sm font-bold">{pm.name}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="bg-surface rounded-3xl border border-border p-8 shadow-xl">
+            <PaymentMethodsPage />
           </div>
         )}
 
@@ -1086,32 +921,12 @@ export function SettingsPage() {
         />
       )}
 
-      {editingCategory && (
-        <EntityEditModal
-          title="Editar Categoria"
-          item={editingCategory}
-          onClose={() => setEditingCategory(null)}
-          onSave={async (data) => {
-            await financeService.salvarCategoria(companyId, { ...data, id: editingCategory.id, companyId });
-            loadData();
-          }}
-          onDelete={async () => {
-            await handleDelete('CATEGORIES', editingCategory.id);
-          }}
-          fields={[
-            { key: 'name', label: 'Nome', type: 'text' },
-            { key: 'type', label: 'Tipo', type: 'select', options: [{v:'REVENUE', l:'Receita'}, {v:'EXPENSE', l:'Despesa'}] },
-            { key: 'dreGroup', label: 'Grupo DRE', type: 'select', options: Object.entries(dreGroupLabels).map(([v, l]) => ({v, l})) }
-          ]}
-        />
-      )}
-
       {editingBank && (
         <EntityEditModal
           title="Editar Conta Bancária"
           item={editingBank}
           onClose={() => setEditingBank(null)}
-          onSave={async (data) => {
+          onSave={async (data: any) => {
             await financeService.salvarContaBancaria(companyId, { ...data, id: editingBank.id, companyId });
             loadData();
           }}
@@ -1123,43 +938,6 @@ export function SettingsPage() {
             { key: 'bankName', label: 'Banco', type: 'text' },
             { key: 'type', label: 'Tipo', type: 'select', options: [{v:'CHECKING', l:'Corrente'}, {v:'SAVINGS', l:'Poupança'}, {v:'INVESTMENT', l:'Investimento'}, {v:'CASH', l:'Caixa'}] },
             { key: 'initialBalance', label: 'Saldo Inicial', type: 'number' }
-          ]}
-        />
-      )}
-
-      {editingCostCenter && (
-        <EntityEditModal
-          title="Editar Centro de Custo"
-          item={editingCostCenter}
-          onClose={() => setEditingCostCenter(null)}
-          onSave={async (data) => {
-            await financeService.salvarCentroCusto(companyId, { ...data, id: editingCostCenter.id, companyId });
-            loadData();
-          }}
-          onDelete={async () => {
-            await handleDelete('COST_CENTERS', editingCostCenter.id);
-          }}
-          fields={[
-            { key: 'name', label: 'Nome', type: 'text' },
-            { key: 'color', label: 'Cor (Hex)', type: 'color' }
-          ]}
-        />
-      )}
-
-      {editingPaymentMethod && (
-        <EntityEditModal
-          title="Editar Forma de Pagamento"
-          item={editingPaymentMethod}
-          onClose={() => setEditingPaymentMethod(null)}
-          onSave={async (data) => {
-            await financeService.salvarFormaPagamento(companyId, { ...data, id: editingPaymentMethod.id, companyId });
-            loadData();
-          }}
-          onDelete={async () => {
-            await handleDelete('PAYMENT_METHODS', editingPaymentMethod.id);
-          }}
-          fields={[
-            { key: 'name', label: 'Nome', type: 'text' }
           ]}
         />
       )}
@@ -1210,30 +988,6 @@ function Select({ label, value, onChange, options, disabled }: any) {
         <option value="">Selecione...</option>
         {options.map((o: any) => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>
-    </div>
-  );
-}
-
-function CategoryGroup({ title, categories, onEdit, dreLabels }: { title: string, categories: ChartOfAccount[], onEdit: (cat: any) => void, dreLabels: Record<string, string> }) {
-  return (
-    <div className="space-y-3">
-      <h4 className="text-xs font-bold uppercase tracking-widest text-text-secondary border-b border-border pb-2">{title}</h4>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {categories.map(cat => (
-          <div 
-            key={cat.id} 
-            onClick={() => onEdit(cat)}
-            className="flex items-center justify-between p-4 bg-bg/50 rounded-xl border border-border group hover:border-accent transition-all cursor-pointer"
-          >
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-text-primary">{cat.name}</span>
-              <span className="text-[10px] text-text-secondary uppercase tracking-wider mt-0.5">
-                {dreLabels[cat.dreGroup] || cat.dreGroup}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -719,22 +719,25 @@ export function TransactionsPage() {
 
       {isImportModalOpen && (
         <ImportModal 
-          bankAccounts={accounts}
-          categories={categories}
-          companyId={companyId}
-          onClose={() => setIsImportModalOpen(false)}
+          onClose={() => setIsImportModalOpen(false)} 
           onSuccess={() => {
             setIsImportModalOpen(false);
             loadData();
             refreshCompanyData();
-          }}
+          }} 
         />
       )}
     </div>
   );
 }
 
-function ImportModal({ bankAccounts, categories, companyId, onClose, onSuccess }: any) {
+function ImportModal({ onClose, onSuccess }: { onClose: () => void, onSuccess: () => void }) {
+  const { 
+    bankAccounts, 
+    categories, 
+    companyId 
+  } = useCompany();
+  
   const [step, setStep] = useState<'UPLOAD' | 'MAPPING' | 'REVIEW' | 'PROCESSING'>('UPLOAD');
   const [selectedBankId, setSelectedBankId] = useState(bankAccounts[0]?.id || '');
   const [fileData, setFileData] = useState<{ headers: string[], rows: any[] } | null>(null);

@@ -18,7 +18,17 @@ export const financeService = {
       const amountPerEntry = (isRecurring || installments === 1) ? data.amount : (data.amount / installments);
       
       const transactionsToInsert = [];
-      const groupId = isRecurring || installments > 1 ? crypto.randomUUID() : null;
+      const generateUUID = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      };
+
+      const groupId = isRecurring || installments > 1 ? generateUUID() : null;
       
       for (let i = 0; i < installments; i++) {
         const dateComp = new Date(data.dateCompetence);
@@ -56,8 +66,8 @@ export const financeService = {
           date_competence: dateComp.toISOString(),
           date_payment: datePay ? datePay.toISOString() : null,
           is_conciliated: false,
-          installment_number: installments > 1 ? i + 1 : null,
-          installments_total: installments > 1 ? installments : null,
+          installment_number: installments > 1 ? i + 1 : 1,
+          installments_total: installments,
           recurrence_type: data.recurrenceType || 'SINGLE',
           recurrence_frequency: data.recurrenceFrequency || 'MONTHLY',
           due_day: data.dueDay || null,
@@ -96,7 +106,7 @@ export const financeService = {
         console.log(`[financeService] Chamando RPC increment_balance para conta ${data.bankAccountId} com valor ${balanceChange}`);
         const { error: rpcError } = await supabase.rpc('increment_balance', { 
           account_id: data.bankAccountId, 
-          amount: balanceChange // Corrigido de amount_to_add para amount
+          amount_to_add: balanceChange 
         });
         
         if (rpcError) {
@@ -185,7 +195,7 @@ export const financeService = {
           const adj = oldTx.type === 'REVENUE' ? -oldTx.amount : oldTx.amount;
           await supabase.rpc('increment_balance', { 
             account_id: oldTx.bank_account_id, 
-            amount: adj 
+            amount_to_add: adj 
           });
         }
         
@@ -199,7 +209,7 @@ export const financeService = {
             const adj = finalType === 'REVENUE' ? finalAmount : -finalAmount;
             await supabase.rpc('increment_balance', { 
               account_id: finalBankId, 
-              amount: adj 
+              amount_to_add: adj 
             });
           }
         }
@@ -235,7 +245,7 @@ export const financeService = {
         const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
         await supabase.rpc('increment_balance', { 
           account_id: tx.bank_account_id, 
-          amount: adj 
+          amount_to_add: adj 
         });
       }
     } catch (error) {
@@ -489,11 +499,11 @@ export const financeService = {
       await Promise.all([
         supabase.rpc('increment_balance', { 
           account_id: data.fromAccountId, 
-          amount: -data.amount 
+          amount_to_add: -data.amount 
         }),
         supabase.rpc('increment_balance', { 
           account_id: data.toAccountId, 
-          amount: data.amount 
+          amount_to_add: data.amount 
         })
       ]);
     } catch (error) {
@@ -589,14 +599,14 @@ export const financeService = {
         const adj = tx.type === 'REVENUE' ? tx.amount : -tx.amount;
         await supabase.rpc('increment_balance', { 
           account_id: tx.bank_account_id, 
-          amount: adj 
+          amount_to_add: adj 
         });
       } else if (status === 'PENDING' && tx.status === 'PAID' && tx.bank_account_id) {
         // Se mudou de pago para pendente, estornar saldo
         const adj = tx.type === 'REVENUE' ? -tx.amount : tx.amount;
         await supabase.rpc('increment_balance', { 
           account_id: tx.bank_account_id, 
-          amount: adj 
+          amount_to_add: adj 
         });
       }
     } catch (error) {
@@ -1231,7 +1241,7 @@ export const financeService = {
       // 5. Atualizar saldo da conta bancária atomicamente via RPC
       await supabase.rpc('increment_balance', { 
         account_id: accountId, 
-        amount: -amount 
+        amount_to_add: -amount 
       });
 
       return tx.id;

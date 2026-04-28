@@ -16,21 +16,29 @@ import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function PaymentMethodsPage() {
-  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    companyId,
+    paymentMethods,
+    loading: companyLoading,
+    refreshData
+  } = useCompany();
+
+  const [loading, setLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newData, setNewData] = useState({ name: '', active: true });
   const [searchTerm, setSearchTerm] = useState('');
   
   const { user, loading: authLoading } = useAuth();
-  const { companyId } = useCompany();
 
-  const loadData = async () => {
-    if (!user || !companyId) return;
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newData.name || !companyId) return;
     setLoading(true);
     try {
-      const data = await financeService.buscarFormasPagamento(companyId);
-      setPaymentMethods(data || []);
+      await financeService.salvarFormaPagamento(companyId, newData);
+      setNewData({ name: '', active: true });
+      setIsAdding(false);
+      await refreshData();
     } catch (error) {
       console.error(error);
     } finally {
@@ -38,37 +46,21 @@ export function PaymentMethodsPage() {
     }
   };
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      loadData();
-    }
-  }, [user, authLoading]);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newData.name) return;
-    try {
-      await financeService.salvarFormaPagamento(companyId, newData);
-      setNewData({ name: '', active: true });
-      setIsAdding(false);
-      loadData();
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja excluir esta forma de pagamento?')) return;
+    setLoading(true);
     try {
       await financeService.excluirFormaPagamento(id);
-      loadData();
+      await refreshData();
     } catch (error) {
       console.error(error);
       alert('Erro ao excluir item.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
+  if (authLoading || (companyLoading && paymentMethods.length === 0)) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
 
   const filteredData = paymentMethods.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase())

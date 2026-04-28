@@ -16,21 +16,29 @@ import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function CostCentersPage() {
-  const [costCenters, setCostCenters] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { 
+    companyId, 
+    costCenters, 
+    loading: companyLoading, 
+    refreshData 
+  } = useCompany();
+  
+  const [loading, setLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [newData, setNewData] = useState({ name: '', color: '#3b82f6', active: true });
   const [searchTerm, setSearchTerm] = useState('');
   
   const { user, loading: authLoading } = useAuth();
-  const { companyId } = useCompany();
 
-  const loadData = async () => {
-    if (!user || !companyId) return;
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newData.name || !companyId) return;
     setLoading(true);
     try {
-      const data = await financeService.buscarCentrosCusto(companyId);
-      setCostCenters(data || []);
+      await financeService.salvarCentroCusto(companyId, newData);
+      setNewData({ name: '', color: '#3b82f6', active: true });
+      setIsAdding(false);
+      await refreshData();
     } catch (error) {
       console.error(error);
     } finally {
@@ -38,37 +46,21 @@ export function CostCentersPage() {
     }
   };
 
-  useEffect(() => {
-    if (!authLoading && user) {
-      loadData();
-    }
-  }, [user, authLoading]);
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newData.name) return;
-    try {
-      await financeService.salvarCentroCusto(companyId, newData);
-      setNewData({ name: '', color: '#3b82f6', active: true });
-      setIsAdding(false);
-      loadData();
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este centro de custo?')) return;
+    setLoading(true);
     try {
       await financeService.excluirCentroCusto(id);
-      loadData();
+      await refreshData();
     } catch (error) {
       console.error(error);
       alert('Erro ao excluir item. Pode haver transações vinculadas.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (authLoading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
+  if (authLoading || (companyLoading && costCenters.length === 0)) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-accent" /></div>;
 
   const filteredData = costCenters.filter(item => 
     item.name.toLowerCase().includes(searchTerm.toLowerCase())

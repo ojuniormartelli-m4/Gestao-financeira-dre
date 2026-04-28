@@ -215,49 +215,32 @@ INSERT INTO chart_of_accounts (company_id, name, type, dre_group, active) VALUES
   -- Receitas
   ('${APP_COMPANY_ID}', 'Venda de Produtos', 'REVENUE', 'OPERATING_REVENUE', true),
   ('${APP_COMPANY_ID}', 'Prestação de Serviços', 'REVENUE', 'OPERATING_REVENUE', true),
-  ('${APP_COMPANY_ID}', 'Receitas Financeiras (Rendimentos/Juros)', 'REVENUE', 'NON_OPERATING', true),
+  ('${APP_COMPANY_ID}', 'Receitas Financeiras', 'REVENUE', 'NON_OPERATING', true),
   ('${APP_COMPANY_ID}', 'Outras Receitas', 'REVENUE', 'NON_OPERATING', true),
-  -- Despesas: Custo de Vendas
-  ('${APP_COMPANY_ID}', 'Custo de Vendas: Fornecedores', 'EXPENSE', 'VARIABLE_COST', true),
-  ('${APP_COMPANY_ID}', 'Custo de Vendas: Fretes', 'EXPENSE', 'VARIABLE_COST', true),
-  ('${APP_COMPANY_ID}', 'Custo de Vendas: Taxas de Marketplace', 'EXPENSE', 'VARIABLE_COST', true),
-  -- Despesas Operacionais
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Aluguel', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Energia', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Internet', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Limpeza', 'EXPENSE', 'FIXED_COST', true),
-  -- Pessoal
-  ('${APP_COMPANY_ID}', 'Pessoal: Salários', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Pessoal: Pró-labore', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Pessoal: Encargos (FGTS/INSS)', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Pessoal: Benefícios', 'EXPENSE', 'FIXED_COST', true),
-  -- Marketing/Vendas
-  ('${APP_COMPANY_ID}', 'Marketing/Vendas: Anúncios (Google/Meta)', 'EXPENSE', 'VARIABLE_COST', true),
-  ('${APP_COMPANY_ID}', 'Marketing/Vendas: Software/SaaS', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Marketing/Vendas: Comissões', 'EXPENSE', 'VARIABLE_COST', true),
-  -- Financeiras
-  ('${APP_COMPANY_ID}', 'Financeiras: Tarifas Bancárias', 'EXPENSE', 'NON_OPERATING', true),
-  ('${APP_COMPANY_ID}', 'Financeiras: Juros de Empréstimos', 'EXPENSE', 'NON_OPERATING', true),
-  ('${APP_COMPANY_ID}', 'Financeiras: Impostos (DAS/ISS)', 'EXPENSE', 'TAX', true)
+  -- Despesas
+  ('${APP_COMPANY_ID}', 'Custos de Vendas', 'EXPENSE', 'VARIABLE_COST', true),
+  ('${APP_COMPANY_ID}', 'Despesas Operacionais', 'EXPENSE', 'FIXED_COST', true),
+  ('${APP_COMPANY_ID}', 'Pessoal/Salários', 'EXPENSE', 'FIXED_COST', true),
+  ('${APP_COMPANY_ID}', 'Marketing/Anúncios', 'EXPENSE', 'VARIABLE_COST', true),
+  ('${APP_COMPANY_ID}', 'Tarifas Bancárias/Impostos', 'EXPENSE', 'TAX', true)
 ON CONFLICT DO NOTHING;
 
 -- 17.4 Centros de Custo
 INSERT INTO cost_centers (company_id, name, active) VALUES
   ('${APP_COMPANY_ID}', 'Administrativo', true),
-  ('${APP_COMPANY_ID}', 'Operacional / Produção', true),
-  ('${APP_COMPANY_ID}', 'Comercial / Vendas', true),
-  ('${APP_COMPANY_ID}', 'Marketing', true),
-  ('${APP_COMPANY_ID}', 'Logística', true)
+  ('${APP_COMPANY_ID}', 'Comercial', true),
+  ('${APP_COMPANY_ID}', 'Operacional', true),
+  ('${APP_COMPANY_ID}', 'Marketing', true)
 ON CONFLICT DO NOTHING;
 
 -- 17.5 Formas de Pagamento
 INSERT INTO payment_methods (company_id, name, active) VALUES
   ('${APP_COMPANY_ID}', 'Pix', true),
+  ('${APP_COMPANY_ID}', 'Dinheiro', true),
+  ('${APP_COMPANY_ID}', 'Boleto', true),
   ('${APP_COMPANY_ID}', 'Cartão de Crédito', true),
   ('${APP_COMPANY_ID}', 'Cartão de Débito', true),
-  ('${APP_COMPANY_ID}', 'Dinheiro (Espécie)', true),
-  ('${APP_COMPANY_ID}', 'Boleto Bancário', true),
-  ('${APP_COMPANY_ID}', 'Transferência Bancária (TED/DOC)', true)
+  ('${APP_COMPANY_ID}', 'Transferência', true)
 ON CONFLICT DO NOTHING;
 
 -- 17.6 Conta Bancária Inicial
@@ -480,49 +463,32 @@ INSERT INTO chart_of_accounts (company_id, name, type, dre_group, active) VALUES
   -- Receitas
   ('${APP_COMPANY_ID}', 'Venda de Produtos', 'REVENUE', 'OPERATING_REVENUE', true),
   ('${APP_COMPANY_ID}', 'Prestação de Serviços', 'REVENUE', 'OPERATING_REVENUE', true),
-  ('${APP_COMPANY_ID}', 'Receitas Financeiras (Rendimentos/Juros)', 'REVENUE', 'NON_OPERATING', true),
+  ('${APP_COMPANY_ID}', 'Receitas Financeiras', 'REVENUE', 'NON_OPERATING', true),
   ('${APP_COMPANY_ID}', 'Outras Receitas', 'REVENUE', 'NON_OPERATING', true),
-  -- Despesas: Custo de Vendas
-  ('${APP_COMPANY_ID}', 'Custo de Vendas: Fornecedores', 'EXPENSE', 'VARIABLE_COST', true),
-  ('${APP_COMPANY_ID}', 'Custo de Vendas: Fretes', 'EXPENSE', 'VARIABLE_COST', true),
-  ('${APP_COMPANY_ID}', 'Custo de Vendas: Taxas de Marketplace', 'EXPENSE', 'VARIABLE_COST', true),
-  -- Despesas Operacionais
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Aluguel', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Energia', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Internet', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Despesas Operacionais: Limpeza', 'EXPENSE', 'FIXED_COST', true),
-  -- Pessoal
-  ('${APP_COMPANY_ID}', 'Pessoal: Salários', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Pessoal: Pró-labore', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Pessoal: Encargos (FGTS/INSS)', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Pessoal: Benefícios', 'EXPENSE', 'FIXED_COST', true),
-  -- Marketing/Vendas
-  ('${APP_COMPANY_ID}', 'Marketing/Vendas: Anúncios (Google/Meta)', 'EXPENSE', 'VARIABLE_COST', true),
-  ('${APP_COMPANY_ID}', 'Marketing/Vendas: Software/SaaS', 'EXPENSE', 'FIXED_COST', true),
-  ('${APP_COMPANY_ID}', 'Marketing/Vendas: Comissões', 'EXPENSE', 'VARIABLE_COST', true),
-  -- Financeiras
-  ('${APP_COMPANY_ID}', 'Financeiras: Tarifas Bancárias', 'EXPENSE', 'NON_OPERATING', true),
-  ('${APP_COMPANY_ID}', 'Financeiras: Juros de Empréstimos', 'EXPENSE', 'NON_OPERATING', true),
-  ('${APP_COMPANY_ID}', 'Financeiras: Impostos (DAS/ISS)', 'EXPENSE', 'TAX', true)
+  -- Despesas
+  ('${APP_COMPANY_ID}', 'Custos de Vendas', 'EXPENSE', 'VARIABLE_COST', true),
+  ('${APP_COMPANY_ID}', 'Despesas Operacionais', 'EXPENSE', 'FIXED_COST', true),
+  ('${APP_COMPANY_ID}', 'Pessoal/Salários', 'EXPENSE', 'FIXED_COST', true),
+  ('${APP_COMPANY_ID}', 'Marketing/Anúncios', 'EXPENSE', 'VARIABLE_COST', true),
+  ('${APP_COMPANY_ID}', 'Tarifas Bancárias/Impostos', 'EXPENSE', 'TAX', true)
 ON CONFLICT DO NOTHING;
 
 -- Centros de Custo
 INSERT INTO cost_centers (company_id, name, active) VALUES
   ('${APP_COMPANY_ID}', 'Administrativo', true),
-  ('${APP_COMPANY_ID}', 'Operacional / Produção', true),
-  ('${APP_COMPANY_ID}', 'Comercial / Vendas', true),
-  ('${APP_COMPANY_ID}', 'Marketing', true),
-  ('${APP_COMPANY_ID}', 'Logística', true)
+  ('${APP_COMPANY_ID}', 'Comercial', true),
+  ('${APP_COMPANY_ID}', 'Operacional', true),
+  ('${APP_COMPANY_ID}', 'Marketing', true)
 ON CONFLICT DO NOTHING;
 
 -- Formas de Pagamento
 INSERT INTO payment_methods (company_id, name, active) VALUES
   ('${APP_COMPANY_ID}', 'Pix', true),
+  ('${APP_COMPANY_ID}', 'Dinheiro', true),
+  ('${APP_COMPANY_ID}', 'Boleto', true),
   ('${APP_COMPANY_ID}', 'Cartão de Crédito', true),
   ('${APP_COMPANY_ID}', 'Cartão de Débito', true),
-  ('${APP_COMPANY_ID}', 'Dinheiro (Espécie)', true),
-  ('${APP_COMPANY_ID}', 'Boleto Bancário', true),
-  ('${APP_COMPANY_ID}', 'Transferência Bancária (TED/DOC)', true)
+  ('${APP_COMPANY_ID}', 'Transferência', true)
 ON CONFLICT DO NOTHING;
 
 -- 5. Garantir Usuário Administrador Inicial
